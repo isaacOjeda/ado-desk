@@ -16,7 +16,7 @@ Branch: feat/detail-views · Delivery: ask-on-risk · Test runner: `cargo test` 
 ## Tasks
 - T1 [S7,S9] Foundation: rich-text sanitization, image proxy protocol, client helpers, detail navigation, shared comment UI, command stubs. Route: inline (shared files). Status: done (cargo test 17 ok, tsc ok, pnpm build ok).
 - T2 [S1,S2,S3,S7] Work item detail (Rust module + UI). Route: delegated writer (parallel with T3, disjoint surfaces). Status: done, commit 0f9d7d0 (cargo test 24 ok, clippy clean, tsc ok, build ok in worktree).
-- T3 [S4,S5,S6,S7] Pull request detail with threads and diff (Rust module + UI). Route: delegated writer (parallel with T2). Status: in progress (worktree writer).
+- T3 [S4,S5,S6,S7] Pull request detail with threads and diff (Rust module + UI). Route: delegated writer (parallel with T2). Status: done, commit 5d7c3cd (cargo test 42 ok in worktree; merged branch 49 ok, clippy clean, tsc ok, tauri build ok).
 - T4 [S1-S9] Seam check, independent security verification (Risk item 2), commits. Route: inline + verifier. Status: pending.
 
 ## Log
@@ -24,3 +24,4 @@ Branch: feat/detail-views · Delivery: ask-on-risk · Test runner: `cargo test` 
 - L2 Baseline commit ea88f76 on main; branch feat/detail-views. RDD on (global).
 - L3 Route evidence: T2/T3 are independent behaviors with disjoint edit surfaces, each several files and well over 100 lines; launched together as parallel writers. Parent owns shared files (lib.rs, client.rs, commands.rs, Workspace.tsx, styles.css, ui.tsx, tauri.conf.json).
 - L4 T1 committed 1a1fb5f (RDD assess: medium, under_budget → pending in slice). T2/T3 launched in isolated git worktrees because both compile the same Rust crate; each commits on its worktree branch, parent merges.
+- L5 Seam check on merged branch: cargo test 49 passed, clippy 0 warnings, tsc ok, pnpm build ok, tauri debug build ok. Browser preview with mocked IPC: work item detail, PR overview and PR files/diff render as specified; fixed a shared layout bug (sidebar footer pushed off-screen by long detail views). Independent security verifier (Risk item 2) running.

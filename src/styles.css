@@ -74,6 +74,7 @@ a {
 .shell {
   display: grid;
   grid-template-columns: 232px 1fr;
+  grid-template-rows: 100%;
   height: 100%;
 }
 
@@ -180,6 +181,9 @@ a {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  /* Keeps long detail views scrolling inside .detail-body instead of growing the grid. */
+  min-height: 0;
+  overflow: hidden;
 }
 
 .toolbar {
@@ -551,6 +555,7 @@ a {
   flex-direction: column;
   height: 100%;
   min-width: 0;
+  min-height: 0;
 }
 
 .detail-header {
@@ -600,6 +605,7 @@ a {
 
 .detail-body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
