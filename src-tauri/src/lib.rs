@@ -8,6 +8,7 @@ mod pull_requests;
 mod queries;
 mod rich_text;
 mod search;
+mod search_bar;
 mod settings;
 mod themes;
 mod work_items;
@@ -24,6 +25,26 @@ pub struct AppState {
     store: credentials::OrganizationStore,
 }
 
+/// Registers the global search shortcut. A shortcut taken by another app does not stop the
+/// app from starting; the bar is then only reachable from the menu bar icon.
+fn install_global_shortcut(app: &tauri::AppHandle) -> tauri::Result<()> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+
+    app.plugin(
+        tauri_plugin_global_shortcut::Builder::new()
+            .with_handler(|app, _shortcut, event| {
+                if event.state() == ShortcutState::Pressed {
+                    let app = app.clone();
+                    // Window work stays off the hotkey callback.
+                    tauri::async_runtime::spawn(async move { search_bar::toggle(&app) });
+                }
+            })
+            .build(),
+    )?;
+    let _ = app.global_shortcut().register(search_bar::DEFAULT_SHORTCUT);
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -36,6 +57,7 @@ pub fn run() {
             let themes_path = app.path().app_config_dir()?.join(themes::store::FILE_NAME);
             app.manage(themes::ThemesState::load(themes_path));
             background::install_tray(app.handle())?;
+            install_global_shortcut(app.handle())?;
             Ok(())
         })
         .on_window_event(background::on_window_event)
@@ -72,6 +94,8 @@ pub fn run() {
             queries::list_work_item_types,
             queries::list_team_members,
             search::quick_search,
+            search_bar::hide_search_bar,
+            search_bar::open_search_hit,
             themes::search_theme_extensions,
             themes::import_theme_extension,
             themes::list_imported_themes,

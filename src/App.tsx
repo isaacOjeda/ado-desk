@@ -5,7 +5,8 @@ import { Workspace } from "./features/workspace/Workspace";
 import { onAddOrganizationRequested } from "./features/organizations/events";
 import { QuickSearch } from "./features/search/QuickSearch";
 import { onQuickSearchRequested, requestQuickSearch } from "./features/search/events";
-import type { SearchHit } from "./features/search/api";
+import { searchApi, type SearchHit } from "./features/search/api";
+import { isHit } from "./features/search/recents";
 import { Spinner } from "./components/ui";
 import "./styles.css";
 
@@ -103,6 +104,19 @@ export default function App() {
     },
     [activeOrganization],
   );
+  // Items picked in the floating search bar arrive as events; they are validated again here.
+  const [openError, setOpenError] = useState<string | null>(null);
+  useEffect(() => {
+    if (activeOrganization === null) return;
+    return subscribe(() =>
+      searchApi.onOpenFromBar((payload) => {
+        if (!isHit(payload)) return;
+        setOpenError(null);
+        openHit(payload).catch((err: unknown) => setOpenError(`Could not open the item: ${message(err)}`));
+      }),
+    );
+  }, [activeOrganization, openHit]);
+
   const closeSearch = useCallback(() => {
     paletteSession.current += 1;
     setSearching(false);
@@ -151,6 +165,14 @@ export default function App() {
             openRequest={openRequest}
             onOpenHandled={openHandled}
           />
+          {openError && (
+            <div className="qs-toast" role="alert">
+              <span>{openError}</span>
+              <button className="btn btn-ghost btn-sm" onClick={() => setOpenError(null)} aria-label="Dismiss">
+                ×
+              </button>
+            </div>
+          )}
           {searching && (
             <QuickSearch organization={auth.session.organization} onOpen={openHit} onClose={closeSearch} />
           )}

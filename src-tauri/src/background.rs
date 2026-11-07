@@ -10,6 +10,7 @@ use crate::commands;
 pub const MAIN_WINDOW: &str = "main";
 
 const OPEN: &str = "open";
+const SEARCH: &str = "search";
 const SETTINGS: &str = "settings";
 const QUIT: &str = "quit";
 
@@ -26,6 +27,7 @@ pub fn show_main(app: &AppHandle) {
 pub fn install_tray(app: &AppHandle) -> tauri::Result<()> {
     let menu = MenuBuilder::new(app)
         .item(&MenuItemBuilder::with_id(OPEN, "Open ADO Desk").build(app)?)
+        .item(&MenuItemBuilder::with_id(SEARCH, "Search…").build(app)?)
         .item(&MenuItemBuilder::with_id(SETTINGS, "Settings…").build(app)?)
         .separator()
         .item(&MenuItemBuilder::with_id(QUIT, "Quit ADO Desk").build(app)?)
@@ -36,6 +38,7 @@ pub fn install_tray(app: &AppHandle) -> tauri::Result<()> {
         .menu(&menu)
         .on_menu_event(|app, event| match event.id().as_ref() {
             OPEN => show_main(app),
+            SEARCH => crate::search_bar::show(app),
             SETTINGS => {
                 // Window creation stays off the menu callback, like the command does.
                 let app = app.clone();
@@ -53,8 +56,9 @@ pub fn install_tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Closing the main window hides it instead of quitting.
+/// Closing the main window hides it instead of quitting; the search bar hides on blur.
 pub fn on_window_event(window: &Window, event: &WindowEvent) {
+    crate::search_bar::on_window_event(window, event);
     if window.label() == MAIN_WINDOW
         && let WindowEvent::CloseRequested { api, .. } = event
     {

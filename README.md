@@ -40,8 +40,15 @@ Press **⌘K** (Ctrl+K on Windows/Linux) or click *Search* in the sidebar:
 ## Background mode
 
 Closing the main window hides it; ADO Desk keeps running behind its menu bar icon (Open ADO
-Desk, Settings…, Quit). Click the Dock icon or *Open ADO Desk* to bring the window back. Quit
+Desk, Search…, Settings…, Quit). Click the Dock icon or *Open ADO Desk* to bring the window back. Quit
 from the menu bar icon or with ⌘Q.
+
+## Global search bar
+
+Press **⌘⇧Space** (Ctrl+Shift+Space on Windows/Linux) from any app, or pick *Search…* in the
+menu bar icon: a floating bar searches like ⌘K. Enter brings ADO Desk forward with the item open
+(switching organization when needed), ⌘Enter opens it in Azure DevOps, Esc or clicking elsewhere
+hides the bar. It is a normal window, so it does not appear over full-screen apps.
 
 ## Themes
 

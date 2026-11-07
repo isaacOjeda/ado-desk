@@ -52,6 +52,32 @@
           "state": "followsWindowActiveState"
         },
         "center": true
+      },
+      {
+        "label": "search",
+        "create": false,
+        "url": "index.html#search",
+        "title": "Search",
+        "width": 680,
+        "height": 440,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "shadow": true,
+        "visibleOnAllWorkspaces": true,
+        "windowEffects": {
+          "effects": [
+            "popover",
+            "acrylic"
+          ],
+          "state": "active",
+          "radius": 12
+        }
       }
     ],
     "security": {

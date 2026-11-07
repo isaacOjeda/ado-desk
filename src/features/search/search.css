@@ -164,6 +164,51 @@
   font-size: 11px;
 }
 
+/* Floating search window: transparent page, the bar fills the frameless window. */
+:root[data-window="search"],
+[data-window="search"] body,
+[data-window="search"] #root {
+  background: transparent;
+}
+
+.qs.qs-bar {
+  width: 100%;
+  height: 100vh;
+  max-height: none;
+  box-shadow: none;
+}
+
+.qs-signed-out {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 100vh;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--content-bg);
+  color: var(--text-muted);
+}
+
+/* Toast for items the main window could not open. */
+.qs-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 10px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--content-bg);
+  box-shadow: 0 12px 30px var(--shadow);
+  transform: translateX(-50%);
+}
+
 /* Sidebar entry point. */
 .nav-search {
   margin-bottom: 8px;

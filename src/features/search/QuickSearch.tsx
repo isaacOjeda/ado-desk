@@ -19,6 +19,8 @@ interface Props {
   /** Rejects when the item cannot be opened (for example its organization cannot connect). */
   onOpen: (hit: SearchHit) => Promise<void>;
   onClose: () => void;
+  /** `bar`: the floating search window, which the palette fills (no backdrop). */
+  variant?: "palette" | "bar";
 }
 
 interface Section {
@@ -39,7 +41,7 @@ function sectionsOf(hits: SearchHit[]): Section[] {
   ].filter((section) => section.hits.length > 0);
 }
 
-export function QuickSearch({ organization, onOpen, onClose }: Props) {
+export function QuickSearch({ organization, onOpen, onClose, variant = "palette" }: Props) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResults | null>(null);
   const [searching, setSearching] = useState(false);
@@ -132,10 +134,9 @@ export function QuickSearch({ organization, onOpen, onClose }: Props) {
   else if (!typed && recents.length === 0)
     status = "Type #123 for a work item, !45 for a pull request, or words from a title.";
 
-  return (
-    <div className="qs-backdrop" onMouseDown={onClose}>
+  const palette = (
       <div
-        className="qs"
+        className={`qs ${variant === "bar" ? "qs-bar" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-label="Quick search"
@@ -209,6 +210,13 @@ export function QuickSearch({ organization, onOpen, onClose }: Props) {
           </span>
         </footer>
       </div>
+  );
+
+  return variant === "bar" ? (
+    palette
+  ) : (
+    <div className="qs-backdrop" onMouseDown={onClose}>
+      {palette}
     </div>
   );
 }

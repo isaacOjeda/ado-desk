@@ -14,7 +14,8 @@ function strings(value: Shape, keys: string[]): boolean {
   return keys.every((key) => typeof value[key] === "string");
 }
 
-function isHit(value: unknown): value is SearchHit {
+/** True when `value` has every field the workspace needs to open it. */
+export function isHit(value: unknown): value is SearchHit {
   if (typeof value !== "object" || value === null) return false;
   const hit = value as Shape;
   const item = hit.item as Shape | null;
