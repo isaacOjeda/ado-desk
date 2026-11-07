@@ -41,7 +41,7 @@ fn install_global_shortcut(app: &tauri::AppHandle) -> tauri::Result<()> {
             })
             .build(),
     )?;
-    let search = app.state::<settings::SettingsState>().settings.lock().unwrap_or_else(|e| e.into_inner()).search.clone();
+    let search = app.state::<settings::SettingsState>().current().search;
     let _ = search_bar::sync_shortcut(app, None, &search);
     Ok(())
 }

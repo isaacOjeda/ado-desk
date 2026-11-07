@@ -75,13 +75,21 @@ pub struct Settings {
 /// Loaded settings plus where they live, managed by Tauri.
 pub struct SettingsState {
     pub path: PathBuf,
+    /// Held only for short reads and writes; never across a call that waits on the main thread.
     pub settings: Mutex<Settings>,
+    /// Serializes `update_settings` calls. Only update (worker threads) takes it, so it may be
+    /// held while the shortcut plugin waits on the main thread.
+    pub updates: Mutex<()>,
 }
 
 impl SettingsState {
     pub fn load(path: PathBuf) -> Self {
         let settings = Mutex::new(load(&path));
-        Self { path, settings }
+        Self { path, settings, updates: Mutex::new(()) }
+    }
+
+    pub fn current(&self) -> Settings {
+        self.settings.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 }
 

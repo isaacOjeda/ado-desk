@@ -38,7 +38,11 @@ pub fn install_tray(app: &AppHandle) -> tauri::Result<()> {
         .menu(&menu)
         .on_menu_event(|app, event| match event.id().as_ref() {
             OPEN => show_main(app),
-            SEARCH => crate::search_bar::show(app),
+            SEARCH => {
+                // Like Settings…: the bar window may be created here, so not inside the callback.
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move { crate::search_bar::show(&app) });
+            }
             SETTINGS => {
                 // Window creation stays off the menu callback, like the command does.
                 let app = app.clone();

@@ -309,7 +309,7 @@ pub async fn list_pull_requests(state: State<'_, AppState>) -> AppResult<Vec<Pul
 
 #[tauri::command]
 pub fn get_settings(state: State<'_, SettingsState>) -> Settings {
-    state.settings.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    state.current()
 }
 
 /// Normalizes, persists and broadcasts the settings; returns the stored value. A changed global
@@ -327,14 +327,16 @@ pub async fn update_settings(
     }
     let settings = settings::normalize(settings);
     {
-        // Holding the lock across the write serializes updates coming from both windows.
-        let mut current = state.settings.lock().unwrap_or_else(|e| e.into_inner());
-        crate::search_bar::sync_shortcut(&app, Some(&current.search), &settings.search)?;
+        // Serializes updates from every window. The settings lock itself is never held while
+        // the shortcut plugin waits on the main thread, where `get_settings` takes it.
+        let _update = state.updates.lock().unwrap_or_else(|e| e.into_inner());
+        let previous = state.current();
+        crate::search_bar::sync_shortcut(&app, Some(&previous.search), &settings.search)?;
         if let Err(e) = settings::save(&state.path, &settings) {
-            let _ = crate::search_bar::sync_shortcut(&app, Some(&settings.search), &current.search);
+            let _ = crate::search_bar::sync_shortcut(&app, Some(&settings.search), &previous.search);
             return Err(format!("Could not save settings: {e}"));
         }
-        *current = settings.clone();
+        *state.settings.lock().unwrap_or_else(|e| e.into_inner()) = settings.clone();
     }
     let _ = app.emit(settings::CHANGED_EVENT, &settings);
     Ok(settings)

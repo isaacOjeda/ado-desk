@@ -28,7 +28,7 @@ pub fn parse_shortcut(text: &str) -> Option<tauri_plugin_global_shortcut::Shortc
     let shortcut: Shortcut = text.trim().parse().ok()?;
     shortcut
         .mods
-        .intersects(Modifiers::SUPER | Modifiers::CONTROL | Modifiers::ALT | Modifiers::META)
+        .intersects(Modifiers::SUPER | Modifiers::CONTROL | Modifiers::ALT)
         .then_some(shortcut)
 }
 
@@ -36,8 +36,8 @@ pub fn is_valid_shortcut(text: &str) -> bool {
     parse_shortcut(text).is_some()
 }
 
-pub const INVALID_SHORTCUT: &str =
-    "That shortcut is not valid: use Command, Control or Alt (optionally with Shift) plus one key";
+pub const INVALID_SHORTCUT: &str = "That shortcut is not supported: use Command, Control or Alt (optionally with \
+     Shift) plus a letter, number, function or punctuation key";
 pub const SHORTCUT_UNAVAILABLE: &str = "That shortcut could not be registered; another app may be using it";
 
 fn active_shortcut(settings: &SearchSettings) -> Option<tauri_plugin_global_shortcut::Shortcut> {
