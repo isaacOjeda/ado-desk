@@ -251,3 +251,34 @@
   background: var(--accent-contrast);
   transform: translateX(16px);
 }
+
+/* ---------- Glass intensity slider ---------- */
+
+.appearance-slider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.appearance-slider input[type="range"] {
+  width: 180px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.appearance-slider-value {
+  width: 38px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.appearance-row.is-disabled .appearance-slider {
+  opacity: 0.45;
+}
+
+.appearance-row.is-disabled input[type="range"] {
+  cursor: default;
+}

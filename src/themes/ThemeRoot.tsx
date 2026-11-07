@@ -43,6 +43,7 @@ applyTheme(
   document.documentElement,
   resolveTheme(BUILTIN_THEMES, initialAppearance, initialPrefersDark),
   initialAppearance.translucency,
+  initialAppearance.glassIntensity,
 );
 
 export interface ThemeState {
@@ -110,7 +111,7 @@ export function ThemeRoot({ children }: { children: ReactNode }) {
   const theme = useMemo(() => resolveTheme(BUILTIN_THEMES, appearance, prefersDark), [appearance, prefersDark]);
 
   useEffect(() => {
-    applyTheme(document.documentElement, theme, appearance.translucency);
+    applyTheme(document.documentElement, theme, appearance.translucency, appearance.glassIntensity);
     cacheAppearance(appearance);
   }, [theme, appearance]);
 

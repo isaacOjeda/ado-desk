@@ -12,6 +12,8 @@ export interface AppearanceSettings {
   darkTheme: string;
   /** Glass/vibrancy layers; off paints opaque surfaces. */
   translucency: boolean;
+  /** How much of the desktop shows through glass layers: 0 (opaque) to 100. Default 50. */
+  glassIntensity: number;
 }
 
 export interface Settings {
@@ -19,7 +21,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  appearance: { mode: "system", lightTheme: "paper", darkTheme: "graphite", translucency: true },
+  appearance: { mode: "system", lightTheme: "paper", darkTheme: "graphite", translucency: true, glassIntensity: 50 },
 };
 
 /** Emitted by Rust to every window after `update_settings` persisted a change. */

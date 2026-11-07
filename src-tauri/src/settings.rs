@@ -31,7 +31,12 @@ pub struct AppearanceSettings {
     pub light_theme: String,
     pub dark_theme: String,
     pub translucency: bool,
+    /// How much of the desktop shows through glass layers, 0 (opaque) to 100.
+    pub glass_intensity: u8,
 }
+
+/// Matches the original fixed glass opacity (sidebar 70%, chrome 76%).
+pub const DEFAULT_GLASS_INTENSITY: u8 = 50;
 
 impl Default for AppearanceSettings {
     fn default() -> Self {
@@ -40,6 +45,7 @@ impl Default for AppearanceSettings {
             light_theme: DEFAULT_LIGHT_THEME.into(),
             dark_theme: DEFAULT_DARK_THEME.into(),
             translucency: true,
+            glass_intensity: DEFAULT_GLASS_INTENSITY,
         }
     }
 }
@@ -73,7 +79,7 @@ fn is_valid_theme_id(id: &str) -> bool {
         && id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
-/// Trims theme ids and replaces empty, oversized or malformed ones with the defaults.
+/// Trims theme ids (empty, oversized or malformed ones become the defaults) and clamps glass intensity.
 pub fn normalize(mut settings: Settings) -> Settings {
     let fix = |id: &mut String, default: &str| {
         let trimmed = id.trim();
@@ -81,6 +87,7 @@ pub fn normalize(mut settings: Settings) -> Settings {
     };
     fix(&mut settings.appearance.light_theme, DEFAULT_LIGHT_THEME);
     fix(&mut settings.appearance.dark_theme, DEFAULT_DARK_THEME);
+    settings.appearance.glass_intensity = settings.appearance.glass_intensity.min(100);
     settings
 }
 
@@ -135,6 +142,25 @@ mod tests {
     }
 
     #[test]
+    fn glass_intensity_defaults_to_today_look_for_older_files() {
+        let settings: Settings = serde_json::from_str(
+            r#"{ "appearance": { "mode": "dark", "lightTheme": "paper", "darkTheme": "graphite", "translucency": true } }"#,
+        )
+        .unwrap();
+
+        assert_eq!(settings.appearance.glass_intensity, DEFAULT_GLASS_INTENSITY);
+        assert_eq!(DEFAULT_GLASS_INTENSITY, 50);
+    }
+
+    #[test]
+    fn normalize_clamps_glass_intensity_to_100() {
+        let mut settings = Settings::default();
+        settings.appearance.glass_intensity = 180;
+
+        assert_eq!(normalize(settings).appearance.glass_intensity, 100);
+    }
+
+    #[test]
     fn normalize_replaces_malformed_or_oversized_theme_ids_with_defaults() {
         let mut settings = Settings::default();
         settings.appearance.light_theme = "</style><script>x</script>".into();
@@ -164,7 +190,7 @@ mod tests {
         assert_eq!(
             json,
             serde_json::json!({
-                "appearance": { "mode": "system", "lightTheme": "paper", "darkTheme": "graphite", "translucency": true }
+                "appearance": { "mode": "system", "lightTheme": "paper", "darkTheme": "graphite", "translucency": true, "glassIntensity": 50 }
             })
         );
     }

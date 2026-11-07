@@ -59,9 +59,29 @@ export function supportsTranslucency(userAgent: string = navigator.userAgent): b
   return /Macintosh|Mac OS X/i.test(userAgent);
 }
 
+/**
+ * Opacity of a glass layer for a 0-100 intensity. At 50 it reproduces the original fixed
+ * values (sidebar 0.70, chrome 0.76); at 100 layers keep a legibility floor (0.40 / 0.52).
+ */
+export function glassAlpha(layer: "sidebar" | "chrome", intensity: number): number {
+  const amount = Math.min(100, Math.max(0, Number.isFinite(intensity) ? intensity : 50)) / 100;
+  const maxTransparency = layer === "sidebar" ? 0.6 : 0.48;
+  return Math.round((1 - amount * maxTransparency) * 1000) / 1000;
+}
+
+/** Replaces the alpha of a `#rrggbb` / `#rrggbbaa` color, returning `rgb(r g b / a)`. */
+export function withAlpha(hex: string, alpha: number): string {
+  const match = /^#([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(hex.trim());
+  if (!match) return hex;
+  const n = parseInt(match[1]!, 16);
+  return `rgb(${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255} / ${alpha})`;
+}
+
 /** Writes the theme onto an element (normally <html>): variables, data attributes and color-scheme. */
-export function applyTheme(root: HTMLElement, theme: Theme, translucency: boolean): void {
+export function applyTheme(root: HTMLElement, theme: Theme, translucency: boolean, glassIntensity = 50): void {
   for (const [name, value] of Object.entries(themeCssVariables(theme.colors))) root.style.setProperty(name, value);
+  root.style.setProperty("--glass-sidebar", withAlpha(theme.colors.glassSidebar, glassAlpha("sidebar", glassIntensity)));
+  root.style.setProperty("--glass-chrome", withAlpha(theme.colors.glassChrome, glassAlpha("chrome", glassIntensity)));
   root.style.colorScheme = theme.kind;
   root.dataset.theme = theme.id;
   root.dataset.themeKind = theme.kind;

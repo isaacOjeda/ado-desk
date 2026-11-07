@@ -1,8 +1,8 @@
 // Appearance settings: mode, the light/dark theme choices and translucency. Rendered by the Settings window.
-import type { CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { AppearanceSettings, Settings, ThemeMode } from "../../lib/settings";
 import { useThemes } from "../../themes/ThemeRoot";
-import { themeCssVariables } from "../../themes/tokens";
+import { supportsTranslucency, themeCssVariables } from "../../themes/tokens";
 import { DEFAULT_THEME_IDS, type Theme, type ThemeKind } from "../../themes/types";
 import "./appearance.css";
 
@@ -83,6 +83,12 @@ export function AppearanceSection({ settings, onChange }: AppearanceSectionProps
           <span className="appearance-switch-thumb" />
         </button>
       </section>
+
+      <GlassIntensity
+        value={appearance.glassIntensity ?? 50}
+        disabled={!appearance.translucency || !supportsTranslucency()}
+        onCommit={(glassIntensity) => update({ glassIntensity })}
+      />
 
       <p className="appearance-note">Importing themes from Open VSX is coming later.</p>
     </div>
@@ -174,5 +180,67 @@ function ThemeCard({
         {isDefault && <span className="theme-card-tag">Default</span>}
       </span>
     </button>
+  );
+}
+
+const GLASS_SAVE_DELAY_MS = 150;
+
+/** Glass percentage slider. Moves instantly, persists debounced so dragging does not spam the settings file. */
+function GlassIntensity({
+  value,
+  disabled,
+  onCommit,
+}: {
+  value: number;
+  disabled: boolean;
+  onCommit: (value: number) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const timer = useRef<number | undefined>(undefined);
+
+  // Follow external changes (another window, initial load) when not mid-drag.
+  useEffect(() => {
+    if (timer.current === undefined) setDraft(value);
+  }, [value]);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+
+  const change = (next: number) => {
+    setDraft(next);
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => {
+      timer.current = undefined;
+      onCommit(next);
+    }, GLASS_SAVE_DELAY_MS);
+  };
+
+  return (
+    <section className={`appearance-row${disabled ? " is-disabled" : ""}`}>
+      <div className="appearance-text">
+        <h3 className="appearance-label" id="appearance-glass">
+          Glass
+        </h3>
+        <p className="appearance-hint">
+          {disabled
+            ? "Available when translucency is on (macOS)."
+            : "How much of the desktop shows through the sidebar and toolbars. Reading panes stay solid."}
+        </p>
+      </div>
+      <div className="appearance-slider">
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={5}
+          value={draft}
+          disabled={disabled}
+          aria-labelledby="appearance-glass"
+          aria-valuetext={`${draft}%`}
+          onChange={(event) => change(Number(event.target.value))}
+        />
+        <output className="appearance-slider-value" aria-hidden>
+          {draft}%
+        </output>
+      </div>
+    </section>
   );
 }

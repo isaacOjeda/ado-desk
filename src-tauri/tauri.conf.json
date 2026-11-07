@@ -15,35 +15,43 @@
       {
         "label": "main",
         "title": "ADO Desk",
-        "width": 1200,
-        "height": 780,
-        "minWidth": 900,
-        "minHeight": 560,
+        "width": 1360,
+        "height": 860,
+        "minWidth": 960,
+        "minHeight": 600,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
         "transparent": true,
         "windowEffects": {
-          "effects": ["sidebar", "mica"],
+          "effects": [
+            "sidebar",
+            "mica"
+          ],
           "state": "followsWindowActiveState"
-        }
+        },
+        "center": true
       },
       {
         "label": "settings",
         "create": false,
         "url": "index.html#settings",
         "title": "Settings",
-        "width": 760,
-        "height": 540,
-        "minWidth": 640,
-        "minHeight": 440,
+        "width": 920,
+        "height": 680,
+        "minWidth": 720,
+        "minHeight": 520,
         "maximizable": false,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
         "transparent": true,
         "windowEffects": {
-          "effects": ["sidebar", "mica"],
+          "effects": [
+            "sidebar",
+            "mica"
+          ],
           "state": "followsWindowActiveState"
-        }
+        },
+        "center": true
       }
     ],
     "security": {
