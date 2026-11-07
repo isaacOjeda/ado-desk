@@ -14,7 +14,8 @@ use tauri::State;
 use crate::AppState;
 use crate::azdo::AzdoClient;
 use crate::azdo::model::{PullRequest, PullRequestState, WorkItem};
-use crate::commands::current_client;
+use crate::commands::connected_clients;
+use crate::credentials::OrganizationIndex;
 use crate::error::{AppError, AppResult};
 use crate::queries::{
     self, PullRequestFilter, PullRequestRoleFilter, PullRequestStatusFilter, QueryError, QueryResult,
@@ -108,6 +109,29 @@ pub fn filter_pull_requests(prs: &[PullRequest], text: &str) -> Vec<PullRequest>
 pub fn cap_work_items(mut items: Vec<WorkItem>) -> Vec<WorkItem> {
     items.truncate(MAX_HITS_PER_KIND);
     items
+}
+
+/// Organizations to search: the active one first, then the others in configured order.
+pub fn search_order(index: &OrganizationIndex) -> Vec<String> {
+    let active = index.active.as_ref().filter(|active| index.organizations.contains(active));
+    active
+        .into_iter()
+        .chain(index.organizations.iter().filter(|org| Some(*org) != active))
+        .cloned()
+        .collect()
+}
+
+/// Combines per-organization outcomes in search order. An organization that fails is named
+/// in `unavailable` and never fails the whole search.
+pub fn combine(outcomes: Vec<(String, QueryResult<Vec<SearchHit>>)>) -> SearchResults {
+    let mut results = SearchResults::default();
+    for (organization, outcome) in outcomes {
+        match outcome {
+            Ok(hits) => results.hits.extend(hits),
+            Err(_) => results.unavailable.push(organization),
+        }
+    }
+    results
 }
 
 // ---------------------------------------------------------------------------
@@ -216,8 +240,8 @@ async fn search_organization(
 // Commands
 // ---------------------------------------------------------------------------
 
-/// Quick search in the active organization. An empty or too short query returns no hits
-/// without calling Azure DevOps.
+/// Quick search in every configured organization, the active one first. An empty or too
+/// short query returns no hits without calling Azure DevOps.
 #[tauri::command]
 pub async fn quick_search(
     state: State<'_, AppState>,
@@ -227,9 +251,21 @@ pub async fn quick_search(
     let Some(query) = parse_quick_query(&query)? else {
         return Ok(SearchResults::default());
     };
-    let client = current_client(&state)?;
-    let hits = search_organization(&client, &search, &query).await?;
-    Ok(SearchResults { hits, unavailable: Vec::new() })
+    let order = search_order(&state.store.index()?);
+    if order.is_empty() {
+        return Err(AppError::NotSignedIn.into());
+    }
+    let clients = connected_clients(&state, &order).await;
+    let (search, query) = (&*search, &query);
+    let outcomes = futures::future::join_all(clients.into_iter().map(|(organization, client)| async move {
+        let outcome = match client {
+            Ok(client) => search_organization(&client, search, query).await,
+            Err(err) => Err(err.into()),
+        };
+        (organization, outcome)
+    }))
+    .await;
+    Ok(combine(outcomes))
 }
 
 #[cfg(test)]
@@ -372,5 +408,44 @@ mod tests {
         let json = serde_json::to_value(&hit).unwrap();
         assert_eq!(json["kind"], "workItem");
         assert_eq!(json["item"]["workItemType"], "Bug");
+    }
+
+    fn hit(organization: &str, id: i64) -> SearchHit {
+        SearchHit::WorkItem { organization: organization.into(), item: wi(id) }
+    }
+
+    fn organization_of(hit: &SearchHit) -> &str {
+        match hit {
+            SearchHit::WorkItem { organization, .. } | SearchHit::PullRequest { organization, .. } => organization,
+        }
+    }
+
+    #[test]
+    fn the_active_organization_is_searched_first() {
+        let index = OrganizationIndex {
+            active: Some("fabrikam".into()),
+            organizations: vec!["contoso".into(), "fabrikam".into(), "tailspin".into()],
+        };
+        assert_eq!(search_order(&index), vec!["fabrikam", "contoso", "tailspin"]);
+
+        let none_active = OrganizationIndex { active: None, organizations: vec!["contoso".into(), "tailspin".into()] };
+        assert_eq!(search_order(&none_active), vec!["contoso", "tailspin"]);
+
+        // An active name missing from the list (stale index) is not searched.
+        let stale = OrganizationIndex { active: Some("gone".into()), organizations: vec!["contoso".into()] };
+        assert_eq!(search_order(&stale), vec!["contoso"]);
+    }
+
+    #[test]
+    fn failed_organizations_are_named_and_the_rest_keep_their_order() {
+        let results = combine(vec![
+            ("fabrikam".into(), Ok(vec![hit("fabrikam", 1), hit("fabrikam", 2)])),
+            ("contoso".into(), Err(QueryError::App(AppError::Unauthorized))),
+            ("tailspin".into(), Ok(vec![hit("tailspin", 3)])),
+            ("woodgrove".into(), Err(QueryError::App(AppError::Forbidden))),
+        ]);
+        let order: Vec<&str> = results.hits.iter().map(organization_of).collect();
+        assert_eq!(order, vec!["fabrikam", "fabrikam", "tailspin"]);
+        assert_eq!(results.unavailable, vec!["contoso", "woodgrove"]);
     }
 }

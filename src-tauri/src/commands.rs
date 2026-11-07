@@ -104,6 +104,33 @@ async fn client_for(state: &AppState, organization: &str) -> AppResult<Arc<AzdoC
     Ok(Arc::new(AzdoClient::connect(organization, &pat).await?))
 }
 
+/// A client for each of `organizations` (configured names), connecting the ones not connected
+/// yet with their stored PAT. New connections are kept for later calls without changing the
+/// active organization; an organization that cannot connect keeps its error.
+pub(crate) async fn connected_clients(
+    state: &AppState,
+    organizations: &[String],
+) -> Vec<(String, AppResult<Arc<AzdoClient>>)> {
+    let connections = futures::future::join_all(organizations.iter().map(|org| client_for(state, org))).await;
+    let index = state.store.index().ok();
+    let mut orgs = organizations_mut(state);
+    organizations
+        .iter()
+        .cloned()
+        .zip(connections)
+        .map(|(organization, client)| {
+            if let Ok(client) = &client {
+                // Skipped when the organization was removed while it was connecting.
+                let configured = index.as_ref().is_some_and(|i| i.organizations.contains(&organization));
+                if configured {
+                    orgs.clients.entry(organization.clone()).or_insert_with(|| client.clone());
+                }
+            }
+            (organization, client)
+        })
+        .collect()
+}
+
 fn activate(app: &AppHandle, state: &AppState, client: Arc<AzdoClient>) -> Session {
     let session = client.session().clone();
     organizations_mut(state).activate(client);

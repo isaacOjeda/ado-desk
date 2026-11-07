@@ -84,10 +84,20 @@ export default function App() {
     };
   }, [canSearch]);
 
-  const openHit = useCallback((hit: SearchHit) => {
-    setSearching(false);
-    setOpenRequest(hit);
-  }, []);
+  // An item of another organization switches to it first; the workspace of that organization
+  // opens the item once it mounts. A failed switch rejects, and the palette shows why.
+  const activeOrganization = auth.status === "signedIn" ? auth.session.organization : null;
+  const openHit = useCallback(
+    async (hit: SearchHit) => {
+      if (hit.organization !== activeOrganization) {
+        const session = await api.switchOrganization(hit.organization);
+        setAuth({ status: "signedIn", session });
+      }
+      setSearching(false);
+      setOpenRequest(hit);
+    },
+    [activeOrganization],
+  );
   const closeSearch = useCallback(() => setSearching(false), []);
   const openHandled = useCallback(() => setOpenRequest(null), []);
 

@@ -31,6 +31,9 @@ Press **⌘K** (Ctrl+K on Windows/Linux) or click *Search* in the sidebar:
 - Other text (2+ characters) searches titles: work items through WIQL across every project, and
   your own pull requests (author or reviewer, any status), since Azure DevOps has no title filter
   for pull requests. Any pull request still opens by `!id`.
+- Every configured organization is searched, the active one first. Opening a result from another
+  organization switches to it. An organization that cannot be searched (for example an expired
+  token) is named above the results; the others still answer.
 - Arrows move, Enter opens in the app, ⌘Enter opens in Azure DevOps, Esc closes. With nothing
   typed, it lists the items you opened recently (stored on this device only).
 

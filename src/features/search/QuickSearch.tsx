@@ -16,7 +16,8 @@ export const MOD_KEY = navigator.userAgent.includes("Mac") ? "⌘" : "Ctrl+";
 interface Props {
   /** The active organization; results from other organizations show their name. */
   organization: string;
-  onOpen: (hit: SearchHit) => void;
+  /** Rejects when the item cannot be opened (for example its organization cannot connect). */
+  onOpen: (hit: SearchHit) => Promise<void>;
   onClose: () => void;
 }
 
@@ -44,9 +45,10 @@ export function QuickSearch({ organization, onOpen, onClose }: Props) {
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState(0);
+  const [opening, setOpening] = useState<string | null>(null);
   const request = useRef(0);
   const list = useRef<HTMLUListElement>(null);
-  const recents = useMemo(() => readRecents().filter((hit) => hit.organization === organization), [organization]);
+  const recents = useMemo(() => readRecents(), []);
   const typed = query.trim() !== "";
 
   useEffect(() => {
@@ -90,6 +92,16 @@ export function QuickSearch({ organization, onOpen, onClose }: Props) {
     list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
   }, [active, results]);
 
+  const open = (hit: SearchHit) => {
+    if (opening) return;
+    setOpening(hit.organization === organization ? null : hit.organization);
+    setError(null);
+    onOpen(hit).catch((err) => {
+      setOpening(null);
+      setError(errorText(err));
+    });
+  };
+
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     // The palette owns the keyboard while open (Esc must not also close a detail view).
     event.stopPropagation();
@@ -107,14 +119,15 @@ export function QuickSearch({ organization, onOpen, onClose }: Props) {
         void openUrl(current.item.url);
         onClose();
       } else {
-        onOpen(current);
+        open(current);
       }
     }
   };
 
   const unavailable = results?.unavailable ?? [];
   let status: string | null = null;
-  if (searching && !results) status = "Searching…";
+  if (opening) status = `Switching to ${opening}…`;
+  else if (searching && !results) status = "Searching…";
   else if (typed && results && flat.length === 0) status = "No work items or pull requests match.";
   else if (!typed && recents.length === 0)
     status = "Type #123 for a work item, !45 for a pull request, or words from a title.";
@@ -171,7 +184,7 @@ export function QuickSearch({ organization, onOpen, onClose }: Props) {
                     showOrganization={hit.organization !== organization}
                     selected={current === hit}
                     onHover={() => setActive(flat.indexOf(hit))}
-                    onOpen={() => onOpen(hit)}
+                    onOpen={() => open(hit)}
                   />
                 ))}
               </ul>
