@@ -10,6 +10,8 @@ use crate::search::SearchHit;
 
 /// Most PRs and work items whose comments are fetched in one check.
 pub const MAX_COMMENT_TARGETS: usize = 25;
+/// Change marker for work items whose comments must be fetched again.
+const RETRY_MARKER: &str = "retry";
 /// More new items than this in one check become a single summary notification.
 pub const MAX_SEPARATE_NOTIFICATIONS: usize = 3;
 
@@ -50,6 +52,8 @@ pub struct Observation {
     /// Open work items assigned to the user.
     pub assigned: Vec<WorkItem>,
     pub comments: Vec<TargetComments>,
+    /// Assigned work items whose comments should have been fetched but could not be.
+    pub unchecked_work_items: Vec<i64>,
 }
 
 /// Which signals the user wants.
@@ -159,6 +163,14 @@ pub fn diff(
         comment_targets: BTreeSet::new(),
         comments: BTreeSet::new(),
     };
+    // Work items whose comments could not be read keep their previous change marker (or a
+    // marker that never matches), so the next check fetches them again.
+    for id in &observed.unchecked_work_items {
+        if next.assigned.contains_key(id) {
+            let before = previous.and_then(|seen| seen.assigned.get(id).cloned());
+            next.assigned.insert(*id, before.unwrap_or_else(|| RETRY_MARKER.to_string()));
+        }
+    }
     // Comment state only survives for targets that are still current.
     if let Some(seen) = previous {
         next.comment_targets = seen.comment_targets.intersection(&current_targets).cloned().collect();
@@ -304,6 +316,7 @@ mod tests {
             pull_requests: vec![pr(1, PullRequestRole::Reviewer, None), pr(2, PullRequestRole::Author, None)],
             assigned: vec![wi(10, "a")],
             comments: vec![TargetComments { target: wi_hit(wi(10, "a")), comments: vec![comment("wi:10:1", "Bo")] }],
+            ..Observation::default()
         };
         let (seen, new) = diff("contoso", None, &observed, ON);
         assert!(new.is_empty());
@@ -319,12 +332,14 @@ mod tests {
             pull_requests: vec![pr(1, PullRequestRole::Reviewer, None)],
             assigned: vec![wi(10, "a")],
             comments: vec![],
+            ..Observation::default()
         };
         let (seen, _) = diff("contoso", None, &first, ON);
         let second = Observation {
             pull_requests: vec![pr(1, PullRequestRole::Reviewer, None), pr(2, PullRequestRole::Reviewer, None)],
             assigned: vec![wi(10, "a"), wi(11, "b")],
             comments: vec![],
+            ..Observation::default()
         };
         let (seen, new) = diff("contoso", Some(&seen), &second, ON);
         assert_eq!(ids(&new, NewKind::ReviewRequest), vec![2]);
@@ -342,6 +357,7 @@ mod tests {
             pull_requests: vec![pr(2, PullRequestRole::Reviewer, None)],
             assigned: vec![wi(11, "b")],
             comments: vec![],
+            ..Observation::default()
         };
         let off = Signals { review_requests: false, assignments: false, comments: false };
         let (next, new) = diff("contoso", Some(&seen), &observed, off);
@@ -358,6 +374,7 @@ mod tests {
             pull_requests: vec![mine.clone()],
             assigned: vec![item.clone()],
             comments: vec![TargetComments { target: wi_hit(item.clone()), comments: vec![comment("wi:10:1", "Bo")] }],
+            ..Observation::default()
         };
         let (seen, _) = diff("contoso", None, &first, ON);
         let second = Observation {
@@ -371,6 +388,7 @@ mod tests {
                 // First fetch of this PR's threads: seeds, does not notify.
                 TargetComments { target: pr_hit(mine.clone()), comments: vec![comment("pr:55:1:1", "Di")] },
             ],
+            ..Observation::default()
         };
         let (seen, new) = diff("contoso", Some(&seen), &second, ON);
         assert_eq!(new.len(), 1);
@@ -386,11 +404,26 @@ mod tests {
                 target: pr_hit(mine),
                 comments: vec![comment("pr:55:1:1", "Di"), comment("pr:55:1:2", "Di"), comment("pr:55:2:1", "Ed")],
             }],
+            ..Observation::default()
         };
         let (_, new) = diff("contoso", Some(&seen), &third, ON);
         assert_eq!(ids(&new, NewKind::Comment), vec![55]);
         assert_eq!(new[0].authors, vec!["Di".to_string(), "Ed".to_string()]);
         assert_eq!(new[0].count, 2);
+    }
+
+    #[test]
+    fn work_items_whose_comments_could_not_be_read_are_retried() {
+        let (seen, _) = diff("contoso", None, &Observation { assigned: vec![wi(10, "a")], ..Observation::default() }, ON);
+        let changed = vec![wi(10, "b"), wi(11, "x")];
+        let failed = Observation { assigned: changed.clone(), unchecked_work_items: vec![10, 11], ..Observation::default() };
+        let (seen, new) = diff("contoso", Some(&seen), &failed, ON);
+        // Item 11 is still reported as newly assigned, once.
+        assert_eq!(ids(&new, NewKind::Assignment), vec![11]);
+        let retry: Vec<i64> = work_items_to_check(Some(&seen), &changed).iter().map(|w| w.id).collect();
+        assert_eq!(retry, vec![10, 11]);
+        let (_, again) = diff("contoso", Some(&seen), &Observation { assigned: changed, ..Observation::default() }, ON);
+        assert!(again.is_empty());
     }
 
     #[test]
@@ -402,6 +435,7 @@ mod tests {
                 TargetComments { target: wi_hit(wi(10, "a")), comments: vec![comment("wi:10:1", "Bo")] },
                 TargetComments { target: pr_hit(pr(55, PullRequestRole::Author, None)), comments: vec![comment("pr:55:1:1", "Bo")] },
             ],
+            ..Observation::default()
         };
         let (seen, _) = diff("contoso", None, &first, ON);
         let (next, _) = diff("contoso", Some(&seen), &Observation::default(), ON);

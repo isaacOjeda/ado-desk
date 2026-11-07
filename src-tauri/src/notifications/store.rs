@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use super::rules::{MAX_SEPARATE_NOTIFICATIONS, NewItem, NewKind, OrgSeen};
 use crate::search::SearchHit;
+use crate::settings::NotificationSettings;
 
 pub const INBOX_FILE: &str = "inbox.json";
 pub const STATE_FILE: &str = "notification-state.json";
@@ -98,7 +99,7 @@ pub fn to_inbox(new: &[NewItem], now_ms: u64) -> Vec<InboxItem> {
                 id: format!("{org}/{target}/{:?}/{now_ms}/{index}", found.kind),
                 kind: found.kind,
                 title: short(&title),
-                detail,
+                detail: short(&detail),
                 at: now_ms,
                 read: false,
                 target: found.target.clone(),
@@ -131,6 +132,24 @@ pub fn mark_read(items: &[InboxItem], id: Option<&str>) -> Vec<InboxItem> {
 
 pub fn unread(items: &[InboxItem]) -> usize {
     items.iter().filter(|item| !item.read).count()
+}
+
+/// State to keep after the notification settings change from `was` to `now`. Turning
+/// notifications (or comment checks) back on starts from a fresh baseline, so whatever happened
+/// while they were off is recorded, not reported.
+pub fn forget_for(seen: &SeenState, was: Option<&NotificationSettings>, now: &NotificationSettings) -> SeenState {
+    let Some(was) = was else { return seen.clone() };
+    if now.enabled && !was.enabled {
+        return SeenState::default();
+    }
+    let mut next = seen.clone();
+    if now.comments && !was.comments {
+        for org in next.organizations.values_mut() {
+            org.comment_targets.clear();
+            org.comments.clear();
+        }
+    }
+    next
 }
 
 /// Native notifications for one check: one per item, or a single summary above
@@ -266,6 +285,47 @@ mod tests {
         let many = to_inbox(&(1..=4).map(|id| new(NewKind::ReviewRequest, pr_hit(id, "a"), &[], 1)).collect::<Vec<_>>(), 1);
         assert_eq!(notifications(&many), vec![("ADO Desk".to_string(), "4 new items in your Inbox".to_string())]);
         assert!(notifications(&[]).is_empty());
+    }
+
+    fn seen_with_comments() -> SeenState {
+        let org = OrgSeen {
+            review_requests: [1].into(),
+            comment_targets: ["wi:10".to_string()].into(),
+            comments: ["wi:10:1".to_string()].into(),
+            ..OrgSeen::default()
+        };
+        SeenState { organizations: [("contoso".to_string(), org)].into() }
+    }
+
+    #[test]
+    fn turning_notifications_back_on_starts_from_a_fresh_baseline() {
+        let on = NotificationSettings::default();
+        let off = NotificationSettings { enabled: false, ..on.clone() };
+        assert_eq!(forget_for(&seen_with_comments(), Some(&off), &on), SeenState::default());
+        // Startup and unrelated changes keep the state.
+        assert_eq!(forget_for(&seen_with_comments(), None, &on), seen_with_comments());
+        let slower = NotificationSettings { interval_minutes: 30, ..on.clone() };
+        assert_eq!(forget_for(&seen_with_comments(), Some(&on), &slower), seen_with_comments());
+    }
+
+    #[test]
+    fn turning_comments_back_on_forgets_only_comment_state() {
+        let on = NotificationSettings::default();
+        let no_comments = NotificationSettings { comments: false, ..on.clone() };
+        let next = forget_for(&seen_with_comments(), Some(&no_comments), &on);
+        let org = &next.organizations["contoso"];
+        assert!(org.comment_targets.is_empty() && org.comments.is_empty());
+        assert_eq!(org.review_requests, [1].into());
+    }
+
+    #[test]
+    fn inbox_details_are_one_line() {
+        let mut hit = pr_hit(1, "a");
+        if let SearchHit::PullRequest { item, .. } = &mut hit {
+            item.repository = "re\npo".into();
+        }
+        let items = to_inbox(&[new(NewKind::ReviewRequest, hit, &[], 1)], 1);
+        assert!(!items[0].detail.contains('\n'));
     }
 
     #[test]

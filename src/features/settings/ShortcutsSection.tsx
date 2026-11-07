@@ -111,9 +111,21 @@ export function ShortcutsSection({ settings, onChange }: Props) {
       </section>
 
       {problem && search.globalShortcutEnabled && (
-        <p className="theme-import-notice is-error" role="alert">
-          {problem}. Record another shortcut, or use Search… in the menu bar icon.
-        </p>
+        <div className="theme-import-notice is-error shortcut-problem" role="alert">
+          <span>{problem}. Record another shortcut, or try again once the other app releases it.</span>
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={() =>
+              settingsApi
+                .retryShortcut()
+                .then(setProblem)
+                .catch(() => {})
+            }
+          >
+            Try again
+          </button>
+        </div>
       )}
 
       <section className={`appearance-row${search.globalShortcutEnabled ? "" : " is-disabled"}`}>

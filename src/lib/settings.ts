@@ -55,6 +55,8 @@ export const settingsApi = {
   openWindow: () => call<void>("open_settings_window"),
   /** Why the saved global shortcut is not active (for example taken at startup), or null. */
   shortcutProblem: () => call<string | null>("global_shortcut_problem"),
+  /** Registers the saved global shortcut again; resolves with the remaining problem, or null. */
+  retryShortcut: () => call<string | null>("retry_global_shortcut"),
   /** Signed-in session held by Rust (no network call); null when signed out. */
   currentSession: () => call<Session | null>("current_session"),
   onChanged: (handler: (settings: Settings) => void): Promise<UnlistenFn> =>

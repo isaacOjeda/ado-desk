@@ -123,7 +123,12 @@ async fn check(app: &AppHandle, settings: &NotificationSettings) {
     let signals = signals(settings);
     let previous = locked(&state.seen).clone();
 
-    let clients = crate::commands::connected_clients(&app_state, &order).await;
+    // Connecting has no timeout of its own; a stuck connection must not stall every later check.
+    let Ok(clients) =
+        tokio::time::timeout(ORGANIZATION_DEADLINE, crate::commands::connected_clients(&app_state, &order)).await
+    else {
+        return;
+    };
     // Boxed futures sidestep a rustc limitation with closures inside `Send` futures.
     let checks: Vec<BoxFuture<'_, Checked>> =
         clients.into_iter().map(|(organization, client)| check_one(organization, client, &previous, signals).boxed()).collect();
@@ -143,7 +148,7 @@ async fn check(app: &AppHandle, settings: &NotificationSettings) {
             found.extend(new);
         }
     }
-    {
+    if next != previous {
         let mut seen = locked(&state.seen);
         let _ = store::save(&state.state_path, &next);
         *seen = next;
@@ -161,7 +166,20 @@ async fn check(app: &AppHandle, settings: &NotificationSettings) {
     };
     publish(app, &inbox);
     for (title, body) in store::notifications(&items) {
-        let _ = app.notification().builder().title(title).body(body).show();
+        if let Err(err) = app.notification().builder().title(title).body(body).show() {
+            eprintln!("notification not shown: {err}");
+        }
+    }
+}
+
+/// Re-enabling notifications (or comment checks) starts from a fresh baseline.
+fn forget_after_change(app: &AppHandle, was: Option<&NotificationSettings>, now: &NotificationSettings) {
+    let state = app.state::<NotificationsState>();
+    let mut seen = locked(&state.seen);
+    let next = store::forget_for(&seen, was, now);
+    if next != *seen {
+        let _ = store::save(&state.state_path, &next);
+        *seen = next;
     }
 }
 
@@ -170,8 +188,11 @@ async fn check(app: &AppHandle, settings: &NotificationSettings) {
 pub fn start(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(FIRST_CHECK_DELAY).await;
+        let mut last: Option<NotificationSettings> = None;
         loop {
             let settings = app.state::<SettingsState>().current().notifications;
+            forget_after_change(&app, last.as_ref(), &settings);
+            last = Some(settings.clone());
             if settings.enabled {
                 check(&app, &settings).await;
             }

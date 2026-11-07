@@ -475,3 +475,10 @@
   background: var(--surface);
   color: var(--text);
 }
+
+.shortcut-problem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+}

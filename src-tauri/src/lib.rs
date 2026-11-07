@@ -108,6 +108,7 @@ pub fn run() {
             search_bar::hide_search_bar,
             search_bar::open_search_hit,
             search_bar::global_shortcut_problem,
+            search_bar::retry_global_shortcut,
             notifications::list_inbox,
             notifications::mark_inbox_read,
             notifications::check_notifications_now,

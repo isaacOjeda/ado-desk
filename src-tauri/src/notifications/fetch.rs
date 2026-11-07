@@ -95,20 +95,32 @@ pub async fn observe(client: &AzdoClient, previous: Option<&OrgSeen>, signals: S
     let assigned = assigned?;
 
     let mut comments = Vec::new();
+    let mut unchecked_work_items = Vec::new();
     if signals.comments {
         let prs = rules::authored_to_check(&pull_requests);
         let items = rules::work_items_to_check(previous, &assigned);
-        // Boxed futures sidestep a rustc limitation with closures inside `Send` streams.
-        let fetches: Vec<BoxFuture<'_, AppResult<TargetComments>>> = prs
+        // Boxed futures sidestep a rustc limitation with closures inside `Send` streams. Each
+        // result carries the work item id (if any) so failed work items are retried next time.
+        let fetches: Vec<BoxFuture<'_, (Option<i64>, AppResult<TargetComments>)>> = prs
             .into_iter()
-            .map(|pr| pr_target(client, pr).boxed())
-            .chain(items.into_iter().map(|item| work_item_target(client, item).boxed()))
+            .map(|pr| pr_target(client, pr).map(|result| (None, result)).boxed())
+            .chain(
+                items
+                    .into_iter()
+                    .map(|item| work_item_target(client, item).map(move |result| (Some(item.id), result)).boxed()),
+            )
             .collect();
-        let results: Vec<AppResult<TargetComments>> =
+        let results: Vec<(Option<i64>, AppResult<TargetComments>)> =
             stream::iter(fetches).buffer_unordered(COMMENT_CONCURRENCY).collect().await;
-        comments.extend(results.into_iter().filter_map(Result::ok));
+        for (work_item, result) in results {
+            match (result, work_item) {
+                (Ok(target), _) => comments.push(target),
+                (Err(_), Some(id)) => unchecked_work_items.push(id),
+                (Err(_), None) => {}
+            }
+        }
     }
-    Ok(Observation { pull_requests, assigned, comments })
+    Ok(Observation { pull_requests, assigned, comments, unchecked_work_items })
 }
 
 #[cfg(test)]

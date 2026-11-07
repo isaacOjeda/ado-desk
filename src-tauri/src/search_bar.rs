@@ -5,7 +5,7 @@ use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent};
 
 use crate::background::{self, MAIN_WINDOW};
-use crate::settings::SearchSettings;
+use crate::settings::{SearchSettings, SettingsState};
 
 pub const SEARCH_WINDOW: &str = "search";
 /// Sent to the bar each time it is shown, so it starts with an empty query.
@@ -57,13 +57,14 @@ fn active_shortcut(settings: &SearchSettings) -> Option<tauri_plugin_global_shor
     settings.global_shortcut_enabled.then(|| parse_shortcut(&settings.global_shortcut)).flatten()
 }
 
-/// Moves the global shortcut from `previous` to `next` settings. When `next` cannot be
-/// registered, `previous` is registered again and the error says why (fixed text).
+/// Moves the global shortcut from `previous` to `next` settings. Returns whether the active
+/// shortcut changed (`false` when it is the same, which registers nothing). When `next` cannot
+/// be registered, `previous` is registered again and the error says why (fixed text).
 pub fn sync_shortcut(
     app: &AppHandle,
     previous: Option<&SearchSettings>,
     next: &SearchSettings,
-) -> Result<(), &'static str> {
+) -> Result<bool, &'static str> {
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
     if next.global_shortcut_enabled && !is_valid_shortcut(&next.global_shortcut) {
@@ -72,7 +73,7 @@ pub fn sync_shortcut(
     let old = previous.and_then(active_shortcut);
     let new = active_shortcut(next);
     if old == new {
-        return Ok(());
+        return Ok(false);
     }
     let shortcuts = app.global_shortcut();
     if let Some(old) = old {
@@ -86,7 +87,26 @@ pub fn sync_shortcut(
         }
         return Err(SHORTCUT_UNAVAILABLE);
     }
-    Ok(())
+    Ok(true)
+}
+
+/// Settings > Shortcuts "Try again": registers the saved shortcut if it is not active (for
+/// example after the app that held it quit). Returns the remaining problem, if any.
+#[tauri::command]
+pub async fn retry_global_shortcut(app: AppHandle, state: tauri::State<'_, SettingsState>) -> Result<Option<String>, ()> {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+
+    // Same gate as `update_settings`, so a retry never interleaves with a shortcut change.
+    let _update = state.updates.lock().unwrap_or_else(|e| e.into_inner());
+    let problem = match active_shortcut(&state.current().search) {
+        None => None,
+        Some(shortcut) => {
+            let shortcuts = app.global_shortcut();
+            (!shortcuts.is_registered(shortcut) && shortcuts.register(shortcut).is_err()).then_some(SHORTCUT_UNAVAILABLE)
+        }
+    };
+    set_shortcut_problem(problem);
+    Ok(problem.map(str::to_string))
 }
 
 /// Longest item payload forwarded from the bar to the main window.

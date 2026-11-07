@@ -71,6 +71,15 @@ pub fn install_tray(app: &AppHandle) -> tauri::Result<()> {
 /// Closing the main window hides it instead of quitting; the search bar hides on blur.
 pub fn on_window_event(window: &Window, event: &WindowEvent) {
     crate::search_bar::on_window_event(window, event);
+    // Without a menu bar icon there is no way back to a hidden app: closing the main window
+    // quits, even if the (hidden) search bar window exists.
+    if window.label() == MAIN_WINDOW
+        && !TRAY_READY.load(Ordering::Relaxed)
+        && matches!(event, WindowEvent::CloseRequested { .. })
+    {
+        window.app_handle().exit(0);
+        return;
+    }
     if window.label() == MAIN_WINDOW
         && TRAY_READY.load(Ordering::Relaxed)
         && let WindowEvent::CloseRequested { api, .. } = event
