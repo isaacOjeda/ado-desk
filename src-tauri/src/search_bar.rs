@@ -5,6 +5,7 @@ use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent};
 
 use crate::background::{self, MAIN_WINDOW};
+use crate::settings::SearchSettings;
 
 pub const SEARCH_WINDOW: &str = "search";
 /// Sent to the bar each time it is shown, so it starts with an empty query.
@@ -13,6 +14,67 @@ pub const SHOWN_EVENT: &str = "search-bar-shown";
 pub const OPEN_HIT_EVENT: &str = "search-bar-open";
 /// Default global shortcut.
 pub const DEFAULT_SHORTCUT: &str = "CommandOrControl+Shift+Space";
+/// Longest shortcut text accepted from the webview.
+pub const MAX_SHORTCUT_LEN: usize = 64;
+
+/// Parses a shortcut such as `CommandOrControl+Shift+Space`. It must hold one key and at least
+/// one of Command, Control or Alt, so it cannot swallow plain typing (`Shift+A`).
+pub fn parse_shortcut(text: &str) -> Option<tauri_plugin_global_shortcut::Shortcut> {
+    use tauri_plugin_global_shortcut::{Modifiers, Shortcut};
+
+    if text.len() > MAX_SHORTCUT_LEN || text.chars().any(char::is_control) {
+        return None;
+    }
+    let shortcut: Shortcut = text.trim().parse().ok()?;
+    shortcut
+        .mods
+        .intersects(Modifiers::SUPER | Modifiers::CONTROL | Modifiers::ALT | Modifiers::META)
+        .then_some(shortcut)
+}
+
+pub fn is_valid_shortcut(text: &str) -> bool {
+    parse_shortcut(text).is_some()
+}
+
+pub const INVALID_SHORTCUT: &str =
+    "That shortcut is not valid: use Command, Control or Alt (optionally with Shift) plus one key";
+pub const SHORTCUT_UNAVAILABLE: &str = "That shortcut could not be registered; another app may be using it";
+
+fn active_shortcut(settings: &SearchSettings) -> Option<tauri_plugin_global_shortcut::Shortcut> {
+    settings.global_shortcut_enabled.then(|| parse_shortcut(&settings.global_shortcut)).flatten()
+}
+
+/// Moves the global shortcut from `previous` to `next` settings. When `next` cannot be
+/// registered, `previous` is registered again and the error says why (fixed text).
+pub fn sync_shortcut(
+    app: &AppHandle,
+    previous: Option<&SearchSettings>,
+    next: &SearchSettings,
+) -> Result<(), &'static str> {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+
+    if next.global_shortcut_enabled && !is_valid_shortcut(&next.global_shortcut) {
+        return Err(INVALID_SHORTCUT);
+    }
+    let old = previous.and_then(active_shortcut);
+    let new = active_shortcut(next);
+    if old == new {
+        return Ok(());
+    }
+    let shortcuts = app.global_shortcut();
+    if let Some(old) = old {
+        let _ = shortcuts.unregister(old);
+    }
+    if let Some(new) = new
+        && shortcuts.register(new).is_err()
+    {
+        if let Some(old) = old {
+            let _ = shortcuts.register(old);
+        }
+        return Err(SHORTCUT_UNAVAILABLE);
+    }
+    Ok(())
+}
 
 /// Longest item payload forwarded from the bar to the main window.
 pub const MAX_HIT_BYTES: usize = 16 * 1024;
@@ -134,5 +196,24 @@ mod tests {
     #[test]
     fn a_window_wider_than_the_monitor_starts_at_its_left_edge() {
         assert_eq!(bar_position((100, 0), (500, 1000), (800, 400)), (100, 200));
+    }
+
+    #[test]
+    fn shortcuts_need_a_key_and_a_command_control_or_alt_modifier() {
+        for valid in ["CommandOrControl+Shift+Space", "Alt+K", "Control+Alt+KeyF", "Command+Digit1", "Super+Slash"] {
+            assert!(is_valid_shortcut(valid), "{valid}");
+        }
+        for invalid in ["", "Space", "K", "Shift+A", "Shift+Space", "Command+Shift", "Command+Nope", "Command+K+J"] {
+            assert!(!is_valid_shortcut(invalid), "{invalid}");
+        }
+    }
+
+    #[test]
+    fn control_characters_and_long_shortcuts_are_rejected() {
+        assert!(!is_valid_shortcut("Command+K\n"));
+        assert!(!is_valid_shortcut("Command+K\u{0}"));
+        let long = format!("{}K", "Command+".repeat(10));
+        assert!(long.len() > MAX_SHORTCUT_LEN);
+        assert!(!is_valid_shortcut(&long));
     }
 }

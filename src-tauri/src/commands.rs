@@ -312,18 +312,28 @@ pub fn get_settings(state: State<'_, SettingsState>) -> Settings {
     state.settings.lock().unwrap_or_else(|e| e.into_inner()).clone()
 }
 
-/// Normalizes, persists and broadcasts the settings; returns the stored value.
+/// Normalizes, persists and broadcasts the settings; returns the stored value. A changed global
+/// shortcut is registered first: if it is invalid or taken, nothing is saved and the previous
+/// shortcut stays active. Async so the shortcut plugin can hop to the main thread.
 #[tauri::command]
-pub fn update_settings(
+pub async fn update_settings(
     app: AppHandle,
     state: State<'_, SettingsState>,
     settings: Settings,
 ) -> Result<Settings, String> {
+    // Checked before `normalize`, which would silently replace an invalid shortcut.
+    if !crate::search_bar::is_valid_shortcut(&settings.search.global_shortcut) {
+        return Err(crate::search_bar::INVALID_SHORTCUT.into());
+    }
     let settings = settings::normalize(settings);
     {
         // Holding the lock across the write serializes updates coming from both windows.
         let mut current = state.settings.lock().unwrap_or_else(|e| e.into_inner());
-        settings::save(&state.path, &settings).map_err(|e| format!("Could not save settings: {e}"))?;
+        crate::search_bar::sync_shortcut(&app, Some(&current.search), &settings.search)?;
+        if let Err(e) = settings::save(&state.path, &settings) {
+            let _ = crate::search_bar::sync_shortcut(&app, Some(&settings.search), &current.search);
+            return Err(format!("Could not save settings: {e}"));
+        }
         *current = settings.clone();
     }
     let _ = app.emit(settings::CHANGED_EVENT, &settings);

@@ -441,3 +441,21 @@
   font-size: 12px;
   color: var(--text-muted);
 }
+
+/* Shortcut recorder (Shortcuts section). */
+.shortcut-recorder {
+  min-width: 120px;
+  border: 1px solid var(--border-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.shortcut-recorder kbd {
+  font-family: inherit;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
+.shortcut-recorder.is-recording {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}

@@ -50,6 +50,11 @@ menu bar icon: a floating bar searches like ⌘K. Enter brings ADO Desk forward 
 (switching organization when needed), ⌘Enter opens it in Azure DevOps, Esc or clicking elsewhere
 hides the bar. It is a normal window, so it does not appear over full-screen apps.
 
+Settings > Shortcuts turns the shortcut off or records a new one (Command, Control or Alt plus a
+key; Shift alone is not enough). A combination another app already uses is rejected and the
+previous one stays active. If the saved shortcut is taken when ADO Desk starts, the bar is still
+available from the menu bar icon.
+
 ## Themes
 
 Settings > Appearance offers built-in reading themes for light and dark mode, translucency
@@ -82,6 +87,8 @@ src-tauri/src/
   azdo/client.rs          HTTP adapter for the Azure DevOps REST API 7.1
   azdo/model.rs           Domain types and pure payload mapping (unit tested)
   search.rs               Quick search: query syntax, title WIQL, PR title filter
+  search_bar.rs           Floating search window, global shortcut validation/registration
+  background.rs           Menu bar icon, hide-on-close, Dock reopen
   themes/                 Open VSX search/import, vsix reader, VS Code color mapping, store
 ```
 

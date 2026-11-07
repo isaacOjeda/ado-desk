@@ -25,10 +25,10 @@ pub struct AppState {
     store: credentials::OrganizationStore,
 }
 
-/// Registers the global search shortcut. A shortcut taken by another app does not stop the
-/// app from starting; the bar is then only reachable from the menu bar icon.
+/// Registers the global search shortcut from the saved settings. A shortcut taken by another
+/// app does not stop the app from starting; the bar is then reachable from the menu bar icon.
 fn install_global_shortcut(app: &tauri::AppHandle) -> tauri::Result<()> {
-    use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+    use tauri_plugin_global_shortcut::ShortcutState;
 
     app.plugin(
         tauri_plugin_global_shortcut::Builder::new()
@@ -41,7 +41,8 @@ fn install_global_shortcut(app: &tauri::AppHandle) -> tauri::Result<()> {
             })
             .build(),
     )?;
-    let _ = app.global_shortcut().register(search_bar::DEFAULT_SHORTCUT);
+    let search = app.state::<settings::SettingsState>().settings.lock().unwrap_or_else(|e| e.into_inner()).search.clone();
+    let _ = search_bar::sync_shortcut(app, None, &search);
     Ok(())
 }
 

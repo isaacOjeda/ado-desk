@@ -50,10 +50,26 @@ impl Default for AppearanceSettings {
     }
 }
 
+/// The global search bar shortcut.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SearchSettings {
+    pub global_shortcut_enabled: bool,
+    /// Accelerator such as `CommandOrControl+Shift+Space`.
+    pub global_shortcut: String,
+}
+
+impl Default for SearchSettings {
+    fn default() -> Self {
+        Self { global_shortcut_enabled: true, global_shortcut: crate::search_bar::DEFAULT_SHORTCUT.into() }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
     pub appearance: AppearanceSettings,
+    pub search: SearchSettings,
 }
 
 /// Loaded settings plus where they live, managed by Tauri.
@@ -88,6 +104,12 @@ pub fn normalize(mut settings: Settings) -> Settings {
     fix(&mut settings.appearance.light_theme, DEFAULT_LIGHT_THEME);
     fix(&mut settings.appearance.dark_theme, DEFAULT_DARK_THEME);
     settings.appearance.glass_intensity = settings.appearance.glass_intensity.min(100);
+    let shortcut = settings.search.global_shortcut.trim();
+    settings.search.global_shortcut = if crate::search_bar::is_valid_shortcut(shortcut) {
+        shortcut.to_string()
+    } else {
+        SearchSettings::default().global_shortcut
+    };
     settings
 }
 
@@ -158,6 +180,26 @@ mod tests {
     }
 
     #[test]
+    fn older_files_get_the_default_global_shortcut() {
+        let settings: Settings = serde_json::from_str(r#"{ "appearance": { "mode": "dark" } }"#).unwrap();
+        assert_eq!(settings.search, SearchSettings::default());
+        assert!(settings.search.global_shortcut_enabled);
+    }
+
+    #[test]
+    fn normalize_replaces_an_invalid_global_shortcut_and_trims_a_valid_one() {
+        let mut settings = Settings::default();
+        settings.search.global_shortcut = "Shift+A".into();
+        assert_eq!(normalize(settings.clone()).search.global_shortcut, "CommandOrControl+Shift+Space");
+
+        settings.search.global_shortcut = " Alt+KeyK ".into();
+        settings.search.global_shortcut_enabled = false;
+        let fixed = normalize(settings);
+        assert_eq!(fixed.search.global_shortcut, "Alt+KeyK");
+        assert!(!fixed.search.global_shortcut_enabled);
+    }
+
+    #[test]
     fn normalize_clamps_glass_intensity_to_100() {
         let mut settings = Settings::default();
         settings.appearance.glass_intensity = 180;
@@ -195,7 +237,8 @@ mod tests {
         assert_eq!(
             json,
             serde_json::json!({
-                "appearance": { "mode": "system", "lightTheme": "paper", "darkTheme": "graphite", "translucency": true, "glassIntensity": 50 }
+                "appearance": { "mode": "system", "lightTheme": "paper", "darkTheme": "graphite", "translucency": true, "glassIntensity": 50 },
+                "search": { "globalShortcutEnabled": true, "globalShortcut": "CommandOrControl+Shift+Space" }
             })
         );
     }

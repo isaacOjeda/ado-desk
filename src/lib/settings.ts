@@ -16,12 +16,21 @@ export interface AppearanceSettings {
   glassIntensity: number;
 }
 
+export interface SearchSettings {
+  /** Whether the global shortcut opens the floating search bar. */
+  globalShortcutEnabled: boolean;
+  /** Accelerator such as `CommandOrControl+Shift+Space`; validated in Rust. */
+  globalShortcut: string;
+}
+
 export interface Settings {
   appearance: AppearanceSettings;
+  search: SearchSettings;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   appearance: { mode: "system", lightTheme: "paper", darkTheme: "graphite", translucency: true, glassIntensity: 50 },
+  search: { globalShortcutEnabled: true, globalShortcut: "CommandOrControl+Shift+Space" },
 };
 
 /** Emitted by Rust to every window after `update_settings` persisted a change. */

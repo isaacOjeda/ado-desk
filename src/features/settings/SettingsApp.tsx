@@ -4,13 +4,15 @@ import { DEFAULT_SETTINGS, settingsApi, type Settings } from "../../lib/settings
 import { ErrorBanner } from "../../components/ui";
 import { AppearanceSection } from "./AppearanceSection";
 import { ProfileSection } from "./ProfileSection";
+import { ShortcutsSection } from "./ShortcutsSection";
 import "./settings.css";
 
-type Section = "profile" | "appearance";
+type Section = "profile" | "appearance" | "shortcuts";
 
 const SECTIONS: { id: Section; label: string; icon: string }[] = [
   { id: "profile", label: "Profile", icon: "◉" },
   { id: "appearance", label: "Appearance", icon: "◐" },
+  { id: "shortcuts", label: "Shortcuts", icon: "⌘" },
 ];
 
 function message(err: unknown): string {
@@ -171,8 +173,10 @@ export function SettingsApp() {
               onRemove={removeOrganization}
               onAdded={organizationAdded}
             />
-          ) : (
+          ) : section === "appearance" ? (
             <AppearanceSection settings={settings} onChange={changeSettings} />
+          ) : (
+            <ShortcutsSection settings={settings} onChange={changeSettings} />
           )}
         </div>
       </main>
