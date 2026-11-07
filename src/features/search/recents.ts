@@ -22,6 +22,8 @@ function isHit(value: unknown): value is SearchHit {
   if (typeof item !== "object" || item === null) return false;
   if (!Number.isInteger(item.id) || (item.id as number) <= 0) return false;
   if (!strings(item, ["title", "project", "url"])) return false;
+  // Cmd+Enter hands the URL to the system opener: only HTTPS links.
+  if (!(item.url as string).startsWith("https://")) return false;
   if (hit.kind === "workItem") return strings(item, ["workItemType", "state"]);
   if (hit.kind === "pullRequest") {
     return (

@@ -112,8 +112,10 @@ pub(crate) async fn connected_clients(
     organizations: &[String],
 ) -> Vec<(String, AppResult<Arc<AzdoClient>>)> {
     let connections = futures::future::join_all(organizations.iter().map(|org| client_for(state, org))).await;
-    let index = state.store.index().ok();
     let mut orgs = organizations_mut(state);
+    // Read under the lock: `remove` deletes from the store before it takes this lock to drop
+    // the client, so a removal either shows here or runs after us and drops what we cache.
+    let index = state.store.index().ok();
     organizations
         .iter()
         .cloned()

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api, onSessionChanged, subscribe, type Session } from "./lib/api";
 import { LoginView } from "./features/auth/LoginView";
 import { Workspace } from "./features/workspace/Workspace";
@@ -24,6 +24,8 @@ export default function App() {
   const [searching, setSearching] = useState(false);
   // An item picked in the quick search, waiting for the workspace of its organization.
   const [openRequest, setOpenRequest] = useState<SearchHit | null>(null);
+  // Bumped whenever the palette closes, so a slow switch finishing afterwards opens nothing.
+  const paletteSession = useRef(0);
 
   useEffect(() => {
     api
@@ -89,16 +91,22 @@ export default function App() {
   const activeOrganization = auth.status === "signedIn" ? auth.session.organization : null;
   const openHit = useCallback(
     async (hit: SearchHit) => {
+      const started = paletteSession.current;
       if (hit.organization !== activeOrganization) {
         const session = await api.switchOrganization(hit.organization);
         setAuth({ status: "signedIn", session });
+        if (paletteSession.current !== started) return;
       }
+      paletteSession.current += 1;
       setSearching(false);
       setOpenRequest(hit);
     },
     [activeOrganization],
   );
-  const closeSearch = useCallback(() => setSearching(false), []);
+  const closeSearch = useCallback(() => {
+    paletteSession.current += 1;
+    setSearching(false);
+  }, []);
   const openHandled = useCallback(() => setOpenRequest(null), []);
 
   // Signing out removes the active organization; Rust may switch to the next one.

@@ -53,7 +53,7 @@ fn invalid_id() -> QueryError {
 pub fn parse_quick_query(raw: &str) -> QueryResult<Option<QuickQuery>> {
     // Checked before trimming so a trailing newline is rejected, not silently dropped.
     if raw.chars().any(char::is_control) {
-        return Err(QueryError::InvalidSearch("Search text cannot contain line breaks"));
+        return Err(QueryError::InvalidSearch("Search text must be a single line without tabs"));
     }
     let text = raw.trim();
     if text.chars().count() > MAX_QUERY_CHARS {

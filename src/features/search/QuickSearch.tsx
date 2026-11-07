@@ -169,7 +169,7 @@ export function QuickSearch({ organization, onOpen, onClose }: Props) {
           </p>
         )}
         {unavailable.length > 0 && (
-          <p className="qs-notice">Could not search {unavailable.join(", ")}. Check its token in the organization menu.</p>
+          <p className="qs-notice">Could not search {unavailable.join(", ")} right now.</p>
         )}
 
         <ul className="qs-results" id="qs-results" role="listbox" ref={list} aria-label="Results">
@@ -230,6 +230,8 @@ function HitRow({ hit, showOrganization, selected, onHover, onOpen }: HitRowProp
       aria-selected={selected}
       className={`qs-row ${selected ? "is-active" : ""}`}
       onMouseMove={selected ? undefined : onHover}
+      // Keeps focus in the input, so the keyboard (Esc, arrows) still drives the palette.
+      onMouseDown={(event) => event.preventDefault()}
       onClick={onOpen}
     >
       {hit.kind === "workItem" ? (
