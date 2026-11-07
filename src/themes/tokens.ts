@@ -18,18 +18,20 @@ const STRICT_HEX = /^#[0-9a-f]{6}([0-9a-f]{2})?$/;
 
 /**
  * Imported themes from Rust or the local cache. Rust already validates them; this re-checks the
- * parts that reach CSS (strict hex colors, `ovsx-` ids) so a tampered cache cannot inject styles.
+ * parts that reach CSS (strict hex colors, `ovsx-` ids) and rebuilds `colors` from the known token
+ * list, so a tampered cache can neither inject styles nor add extra CSS variables.
  */
 export function parseImportedThemes(raw: unknown): Theme[] {
-  return parseThemes(raw).filter(
-    (t) =>
-      t.id.startsWith("ovsx-") &&
-      typeof t.name === "string" &&
-      Object.keys(BUILTIN_THEMES[0]?.colors ?? {}).every((token) => {
-        const value = (t.colors as unknown as Record<string, unknown>)[token];
-        return typeof value === "string" && STRICT_HEX.test(value);
-      }),
-  );
+  const tokens = Object.keys(BUILTIN_THEMES[0]?.colors ?? {}) as (keyof ThemeColors)[];
+  const themes: Theme[] = [];
+  for (const t of parseThemes(raw)) {
+    if (!t.id.startsWith("ovsx-") || typeof t.name !== "string") continue;
+    const source = t.colors as unknown as Record<string, unknown>;
+    if (!tokens.every((token) => typeof source[token] === "string" && STRICT_HEX.test(source[token] as string))) continue;
+    const colors = Object.fromEntries(tokens.map((token) => [token, source[token]])) as unknown as ThemeColors;
+    themes.push({ ...t, colors });
+  }
+  return themes;
 }
 
 /** System mode follows the OS; explicit modes win. */

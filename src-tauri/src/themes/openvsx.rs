@@ -1,6 +1,6 @@
 //! Minimal Open VSX client: theme search and extension download. It is separate from the
 //! Azure DevOps client (no shared headers or credentials) and only starts requests against
-//! `https://open-vsx.org/api`; downloads may redirect to Open VSX's storage, HTTPS only.
+//! `https://open-vsx.org/api`; downloads may redirect only to Open VSX's storage host, HTTPS only.
 
 use std::time::Duration;
 
@@ -13,6 +13,10 @@ use crate::error::{AppError, AppResult};
 
 const API: &str = "https://open-vsx.org/api";
 const API_HOST: &str = "open-vsx.org";
+/// Hosts a request may be redirected to: the API and the storage it serves packages from.
+const REDIRECT_HOSTS: [&str; 2] = [API_HOST, "openvsx.eclipsecontent.org"];
+/// Largest search response read; a page of 24 results is a few kilobytes.
+const MAX_SEARCH_BYTES: usize = 2 * 1024 * 1024;
 /// Largest `.vsix` downloaded; real theme packages are well under 1 MB.
 pub const MAX_VSIX_BYTES: usize = 20 * 1024 * 1024;
 /// Results shown per search.
@@ -120,6 +124,34 @@ pub fn extension_url(namespace: &str, name: &str) -> AppResult<Url> {
     Ok(url)
 }
 
+/// Redirect targets: HTTPS on an Open VSX host, no custom port or credentials.
+pub fn is_allowed_redirect(url: &Url) -> bool {
+    url.scheme() == "https"
+        && url.host_str().is_some_and(|host| REDIRECT_HOSTS.contains(&host))
+        && url.port().is_none()
+        && url.username().is_empty()
+}
+
+/// Reads a response body, failing once it exceeds `cap` bytes.
+async fn read_capped(mut response: reqwest::Response, cap: usize) -> AppResult<Vec<u8>> {
+    let too_large = AppError::ThemeImport("The response from Open VSX is too large");
+    if response.content_length().is_some_and(|len| len > cap as u64) {
+        return Err(too_large);
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await? {
+        if bytes.len() + chunk.len() > cap {
+            return Err(too_large);
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(bytes)
+}
+
+fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> AppResult<T> {
+    serde_json::from_slice(bytes).map_err(|_| AppError::ThemeImport("Unexpected response from Open VSX"))
+}
+
 /// Only HTTPS download links on the Open VSX API host are followed.
 pub fn is_trusted_download(url: &Url) -> bool {
     url.scheme() == "https" && url.host_str() == Some(API_HOST) && url.port().is_none() && url.username().is_empty()
@@ -137,7 +169,7 @@ impl OpenVsx {
             .connect_timeout(Duration::from_secs(10))
             .https_only(true)
             .redirect(redirect::Policy::custom(|attempt| {
-                if attempt.previous().len() >= 5 || attempt.url().scheme() != "https" {
+                if attempt.previous().len() >= 5 || !is_allowed_redirect(attempt.url()) {
                     attempt.stop()
                 } else {
                     attempt.follow()
@@ -157,23 +189,13 @@ impl OpenVsx {
     }
 
     pub async fn search(&self, query: &str) -> AppResult<Vec<ThemeExtension>> {
-        let response: SearchResponse = self
-            .get(search_url(query))
-            .await?
-            .json()
-            .await
-            .map_err(|_| AppError::ThemeImport("Unexpected response from Open VSX"))?;
+        let response: SearchResponse = decode(&read_capped(self.get(search_url(query)).await?, MAX_SEARCH_BYTES).await?)?;
         Ok(response.extensions.iter().filter_map(RawExtension::summary).collect())
     }
 
     /// Downloads the latest `.vsix` of `namespace/name`, returning its summary and bytes.
     pub async fn download(&self, namespace: &str, name: &str) -> AppResult<(ThemeExtension, Vec<u8>)> {
-        let raw: RawExtension = self
-            .get(extension_url(namespace, name)?)
-            .await?
-            .json()
-            .await
-            .map_err(|_| AppError::ThemeImport("Unexpected response from Open VSX"))?;
+        let raw: RawExtension = decode(&read_capped(self.get(extension_url(namespace, name)?).await?, MAX_SEARCH_BYTES).await?)?;
         let summary = raw.summary().ok_or(AppError::ThemeImport("Unexpected response from Open VSX"))?;
         let download = raw
             .files
@@ -182,17 +204,12 @@ impl OpenVsx {
             .filter(is_trusted_download)
             .ok_or(AppError::ThemeImport("Open VSX has no downloadable package for this extension"))?;
 
-        let mut response = self.get(download).await?;
-        if response.content_length().is_some_and(|len| len > MAX_VSIX_BYTES as u64) {
-            return Err(AppError::ThemeImport("The extension package is too large to import"));
-        }
-        let mut bytes = Vec::new();
-        while let Some(chunk) = response.chunk().await? {
-            if bytes.len() + chunk.len() > MAX_VSIX_BYTES {
-                return Err(AppError::ThemeImport("The extension package is too large to import"));
-            }
-            bytes.extend_from_slice(&chunk);
-        }
+        let bytes = read_capped(self.get(download).await?, MAX_VSIX_BYTES)
+            .await
+            .map_err(|e| match e {
+                AppError::ThemeImport(_) => AppError::ThemeImport("The extension package is too large to import"),
+                other => other,
+            })?;
         Ok((summary, bytes))
     }
 }
@@ -247,6 +264,22 @@ mod tests {
             "https://user@open-vsx.org/a.vsix",
         ] {
             assert!(!is_trusted_download(&Url::parse(bad).unwrap()), "{bad}");
+        }
+    }
+
+    #[test]
+    fn redirects_only_reach_open_vsx_hosts_over_https() {
+        for ok in ["https://open-vsx.org/api/x", "https://openvsx.eclipsecontent.org/a/b/a.b-1.0.0.vsix"] {
+            assert!(is_allowed_redirect(&Url::parse(ok).unwrap()), "{ok}");
+        }
+        for bad in [
+            "http://openvsx.eclipsecontent.org/a.vsix",
+            "https://evil.example/a.vsix",
+            "https://eclipsecontent.org.evil.example/a.vsix",
+            "https://openvsx.eclipsecontent.org:444/a.vsix",
+            "https://user@open-vsx.org/a.vsix",
+        ] {
+            assert!(!is_allowed_redirect(&Url::parse(bad).unwrap()), "{bad}");
         }
     }
 

@@ -33,8 +33,8 @@ extension. Every color theme in it is added to the Light or Dark picker (hover a
 remove it). Notes:
 
 - This is the only network call outside Azure DevOps. It runs in Rust, only when you open the
-  browser or search, and only against `https://open-vsx.org` (downloads may redirect to Open
-  VSX storage over HTTPS). Nothing about your organizations is sent.
+  browser or search, and only against `https://open-vsx.org` (downloads may redirect only to Open
+  VSX storage, `openvsx.eclipsecontent.org`, over HTTPS). Nothing about your organizations is sent.
 - The `.vsix` is read in memory with size caps and never unpacked to disk. Only the theme
   colors are kept, mapped onto the app's tokens; tokens a theme does not define are derived
   or come from the default built-in theme.

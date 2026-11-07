@@ -102,9 +102,14 @@ fn parent(path: &str) -> &str {
     path.rsplit_once('/').map_or("", |(dir, _)| dir)
 }
 
-/// Keeps printable characters, trims, and bounds the length.
+/// Bidirectional and zero-width format characters, which can make a name display as something else.
+fn is_format_char(c: char) -> bool {
+    matches!(c, '\u{200b}'..='\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2060}'..='\u{2069}' | '\u{feff}')
+}
+
+/// Keeps printable characters (no control or bidi format characters), trims, and bounds the length.
 pub fn clean_text(input: &str, max_chars: usize) -> String {
-    let cleaned: String = input.chars().filter(|c| !c.is_control()).collect();
+    let cleaned: String = input.chars().filter(|c| !c.is_control() && !is_format_char(*c)).collect();
     cleaned.trim().chars().take(max_chars).collect::<String>().trim().to_string()
 }
 
@@ -289,5 +294,6 @@ pub(crate) mod tests {
         ]);
         assert_eq!(read_themes(bytes, "Fallback\u{7}Name").unwrap()[0].name, "FallbackName");
         assert_eq!(clean_text(&format!("  {}  ", "x".repeat(200)), MAX_NAME_CHARS).len(), MAX_NAME_CHARS);
+        assert_eq!(clean_text("\u{202e}evil\u{200b} name\u{2066}", MAX_NAME_CHARS), "evil name");
     }
 }
