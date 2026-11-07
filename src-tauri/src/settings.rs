@@ -65,11 +65,39 @@ impl Default for SearchSettings {
     }
 }
 
+/// Background checks for review requests, assignments and comments.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct NotificationSettings {
+    pub enabled: bool,
+    /// Minutes between checks, 1 to 60.
+    pub interval_minutes: u8,
+    pub review_requests: bool,
+    pub assignments: bool,
+    pub comments: bool,
+}
+
+pub const DEFAULT_INTERVAL_MINUTES: u8 = 5;
+pub const MAX_INTERVAL_MINUTES: u8 = 60;
+
+impl Default for NotificationSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            interval_minutes: DEFAULT_INTERVAL_MINUTES,
+            review_requests: true,
+            assignments: true,
+            comments: true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
     pub appearance: AppearanceSettings,
     pub search: SearchSettings,
+    pub notifications: NotificationSettings,
 }
 
 /// Loaded settings plus where they live, managed by Tauri.
@@ -112,6 +140,7 @@ pub fn normalize(mut settings: Settings) -> Settings {
     fix(&mut settings.appearance.light_theme, DEFAULT_LIGHT_THEME);
     fix(&mut settings.appearance.dark_theme, DEFAULT_DARK_THEME);
     settings.appearance.glass_intensity = settings.appearance.glass_intensity.min(100);
+    settings.notifications.interval_minutes = settings.notifications.interval_minutes.clamp(1, MAX_INTERVAL_MINUTES);
     let shortcut = settings.search.global_shortcut.trim();
     settings.search.global_shortcut = if crate::search_bar::is_valid_shortcut(shortcut) {
         shortcut.to_string()
@@ -188,6 +217,20 @@ mod tests {
     }
 
     #[test]
+    fn older_files_get_default_notifications_and_the_interval_is_clamped() {
+        let settings: Settings = serde_json::from_str(r#"{ "appearance": { "mode": "dark" } }"#).unwrap();
+        assert_eq!(settings.notifications, NotificationSettings::default());
+
+        let mut settings = Settings::default();
+        settings.notifications.interval_minutes = 0;
+        assert_eq!(normalize(settings.clone()).notifications.interval_minutes, 1);
+        settings.notifications.interval_minutes = 200;
+        assert_eq!(normalize(settings.clone()).notifications.interval_minutes, 60);
+        settings.notifications.interval_minutes = 15;
+        assert_eq!(normalize(settings).notifications.interval_minutes, 15);
+    }
+
+    #[test]
     fn older_files_get_the_default_global_shortcut() {
         let settings: Settings = serde_json::from_str(r#"{ "appearance": { "mode": "dark" } }"#).unwrap();
         assert_eq!(settings.search, SearchSettings::default());
@@ -246,7 +289,8 @@ mod tests {
             json,
             serde_json::json!({
                 "appearance": { "mode": "system", "lightTheme": "paper", "darkTheme": "graphite", "translucency": true, "glassIntensity": 50 },
-                "search": { "globalShortcutEnabled": true, "globalShortcut": "CommandOrControl+Shift+Space" }
+                "search": { "globalShortcutEnabled": true, "globalShortcut": "CommandOrControl+Shift+Space" },
+                "notifications": { "enabled": true, "intervalMinutes": 5, "reviewRequests": true, "assignments": true, "comments": true }
             })
         );
     }

@@ -10,6 +10,7 @@ use tauri::{AppHandle, Manager, Window, WindowEvent};
 use crate::commands;
 
 pub const MAIN_WINDOW: &str = "main";
+pub const TRAY_ID: &str = "ado-desk";
 
 /// Whether the menu bar icon exists. Without it, closing the main window quits as before,
 /// since there would be no way back on Windows/Linux.
@@ -39,7 +40,7 @@ pub fn install_tray(app: &AppHandle) -> tauri::Result<()> {
         .item(&MenuItemBuilder::with_id(QUIT, "Quit ADO Desk").build(app)?)
         .build()?;
 
-    let mut tray = TrayIconBuilder::with_id("ado-desk")
+    let mut tray = TrayIconBuilder::with_id(TRAY_ID)
         .tooltip("ADO Desk")
         .menu(&menu)
         .on_menu_event(|app, event| match event.id().as_ref() {

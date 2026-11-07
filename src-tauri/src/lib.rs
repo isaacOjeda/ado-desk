@@ -51,6 +51,7 @@ fn install_global_shortcut(app: &tauri::AppHandle) -> tauri::Result<()> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(AppState::default())
         .manage(search::SearchState::default())
         .setup(|app| {
@@ -63,6 +64,11 @@ pub fn run() {
                 eprintln!("menu bar icon unavailable: {err}");
             }
             install_global_shortcut(app.handle())?;
+            let notifications = notifications::NotificationsState::load(&app.path().app_config_dir()?);
+            app.manage(notifications);
+            let inbox = notifications::list_inbox(app.state());
+            notifications::publish(app.handle(), &inbox);
+            notifications::start(app.handle().clone());
             Ok(())
         })
         .on_window_event(background::on_window_event)
@@ -102,6 +108,9 @@ pub fn run() {
             search_bar::hide_search_bar,
             search_bar::open_search_hit,
             search_bar::global_shortcut_problem,
+            notifications::list_inbox,
+            notifications::mark_inbox_read,
+            notifications::check_notifications_now,
             themes::search_theme_extensions,
             themes::import_theme_extension,
             themes::list_imported_themes,

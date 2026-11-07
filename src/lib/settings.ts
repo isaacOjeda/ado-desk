@@ -23,14 +23,26 @@ export interface SearchSettings {
   globalShortcut: string;
 }
 
+export interface NotificationSettings {
+  /** Background checks for review requests, assignments and comments. */
+  enabled: boolean;
+  /** Minutes between checks, 1 to 60 (clamped in Rust). */
+  intervalMinutes: number;
+  reviewRequests: boolean;
+  assignments: boolean;
+  comments: boolean;
+}
+
 export interface Settings {
   appearance: AppearanceSettings;
   search: SearchSettings;
+  notifications: NotificationSettings;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   appearance: { mode: "system", lightTheme: "paper", darkTheme: "graphite", translucency: true, glassIntensity: 50 },
   search: { globalShortcutEnabled: true, globalShortcut: "CommandOrControl+Shift+Space" },
+  notifications: { enabled: true, intervalMinutes: 5, reviewRequests: true, assignments: true, comments: true },
 };
 
 /** Emitted by Rust to every window after `update_settings` persisted a change. */

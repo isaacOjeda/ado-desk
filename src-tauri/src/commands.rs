@@ -339,6 +339,11 @@ pub async fn update_settings(
             return Err(format!("Could not save settings: {e}"));
         }
         *state.settings.lock().unwrap_or_else(|e| e.into_inner()) = settings.clone();
+        if previous.notifications != settings.notifications
+            && let Some(notifications) = app.try_state::<crate::notifications::NotificationsState>()
+        {
+            notifications.wake();
+        }
     }
     let _ = app.emit(settings::CHANGED_EVENT, &settings);
     Ok(settings)

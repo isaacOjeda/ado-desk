@@ -661,7 +661,7 @@ pub fn build_file_diff(old: Option<&[u8]>, new: Option<&[u8]>) -> FileDiff {
 // HTTP orchestration
 // ---------------------------------------------------------------------------
 
-fn pr_url(client: &AzdoClient, project: &str, repository_id: &str, id: i64, tail: &[&str]) -> url::Url {
+pub(crate) fn pr_url(client: &AzdoClient, project: &str, repository_id: &str, id: i64, tail: &[&str]) -> url::Url {
     let id = id.to_string();
     let mut segments = vec![project, "_apis", "git", "repositories", repository_id, "pullRequests", &id];
     segments.extend_from_slice(tail);
