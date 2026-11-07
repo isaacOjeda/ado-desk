@@ -280,6 +280,10 @@ pub fn validate_project(project: &str) -> QueryResult<String> {
 
 /// An iteration path must be the project's root iteration or a node below it.
 fn validate_iteration_path(path: &str, project: &str) -> QueryResult<String> {
+    // Checked before trimming so a trailing newline is rejected, not silently dropped.
+    if path.chars().any(char::is_control) {
+        return Err(invalid("values cannot contain control characters"));
+    }
     let path = path.trim();
     let inside = path.eq_ignore_ascii_case(project)
         || path
@@ -616,6 +620,12 @@ pub async fn list_team_members(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn iteration_paths_with_control_characters_are_rejected_not_trimmed() {
+        assert!(validate_iteration_path("Portal\\Sprint 1\n", "Portal").is_err());
+        assert!(validate_iteration_path("Portal\\Sprint 1", "Portal").is_ok());
+    }
+
     use super::*;
     use serde_json::json;
 

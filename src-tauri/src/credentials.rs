@@ -184,9 +184,6 @@ impl OrganizationStore {
         let _guard = self.guard();
         let organization = canonical(organization);
         let mut index = self.load_index()?;
-        self.secrets.delete(&pat_account(&organization))?;
-        self.delete_legacy_of(&organization);
-
         if let Some(position) = index.organizations.iter().position(|o| *o == organization) {
             index.organizations.remove(position);
             if index.active.as_deref() == Some(organization.as_str()) {
@@ -194,7 +191,11 @@ impl OrganizationStore {
                 index.active = index.organizations.get(next).cloned();
             }
         }
+        // Index first: if it cannot be saved the organization stays fully usable. A failure
+        // deleting the PAT afterwards only leaves an unreachable entry, never a ghost org.
         self.save_index(&index)?;
+        self.secrets.delete(&pat_account(&organization))?;
+        self.delete_legacy_of(&organization);
         Ok(index)
     }
 
@@ -357,6 +358,19 @@ mod tests {
     use super::*;
 
     const LEGACY: &str = r#"{"organization":"Contoso","pat":"legacy-token"}"#;
+
+    #[test]
+    fn failed_index_write_on_remove_keeps_the_organization_usable() {
+        let secrets = MemoryStore::default();
+        let store = OrganizationStore::new(Box::new(secrets.clone()));
+        store.add("contoso", "token").unwrap();
+        secrets.fail_set("organizations");
+
+        assert!(store.remove("contoso").is_err());
+
+        assert_eq!(secrets.read("org:contoso").as_deref(), Some("token"));
+        assert_eq!(store.index().unwrap().organizations, vec!["contoso".to_string()]);
+    }
 
     fn store(memory: &MemoryStore) -> OrganizationStore {
         OrganizationStore::new(Box::new(memory.clone()))

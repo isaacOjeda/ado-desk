@@ -11,12 +11,13 @@ Branch: feat/multi-org-filters (stacked on feat/appearance-settings) · Delivery
 - S6 (assumptions) Default filters reproduce today's lists (open work items assigned to me; my active PRs). Assignee options: Me, Anyone, Unassigned, or a specific person. Sprint options: Any, Current (of the project's default team), or a specific iteration. Filters are remembered per organization on this device.
 
 ## Tasks
-- T1 [S1,S2,S5] Multi-organization: credential store with migration, per-org clients, add/switch/remove commands, sidebar org switcher, add-org flow, Settings Profile list. Route: delegated writer (parallel, worktree).
-- T2 [S3,S4,S6] Filters: typed filter queries (WIQL built safely in Rust, PR search criteria by status/project), project/iteration/type lookups, filter bar UI for both lists. Route: delegated writer (parallel, worktree).
-- T3 Seam merge, checks, visual check, verifier (Risk items 1 and 2 for T1).
+- T1 [S1,S2,S5] Multi-organization: credential store with migration, per-org clients, add/switch/remove commands, sidebar org switcher, add-org flow, Settings Profile list. Route: delegated writer (parallel, worktree). Status: done, b321a18.
+- T2 [S3,S4,S6] Filters: typed filter queries (WIQL built safely in Rust, PR search criteria by status/project), project/iteration/type lookups, filter bar UI for both lists. Route: delegated writer (parallel, worktree). Status: done, 07d93f3.
+- T3 Seam merge, checks, visual check, verifier (Risk items 1 and 2 for T1). Status: done.
 
 ## Log
 - L1 (2026-11-06) User request: "Me gustaría que fuera multi organización, poder configurar más orgs con su pat // También me gustaría agregar filtros avanzados, filtrar por proyecto, asignado, sprint, tipo de ítem, y en PRs algo similar, por proyecto, ver PRs cerrados o abandonados"
 - L2 Question asked (view model for several orgs); answer: "Cambiar entre orgs (Recommended)".
 - L3 Route evidence: T1/T2 independent behaviors, mostly disjoint surfaces (shared only lib.rs handler list, resolved at merge); parallel worktrees; parent context past the long-session backstop.
 - L4 T1 merged as b321a18, T2 merged as 07d93f3 (no conflicts). Seam check: cargo test 105+5 ok, clippy clean, tsc ok, pnpm build ok, tauri debug build ok. Browser preview with mocked IPC: org switcher menu, work item filter bar, PR filter bar with Completed/Abandoned badges render as specified. Independent verifier (items 1, 2) running.
+- L5 Independent verifier (items 1, 2): no blockers; migration never lost a stored sign-in across probed failure paths; WIQL values escaped or rejected; defaults byte-identical to baseline; S1-S6 PASS (live lookups unverifiable offline). Applied advisory 2 (remove saves the index before deleting the PAT; RED observed) and 7 (iteration paths with control characters rejected, not trimmed; RED observed). Accepted: corrupt-index+add hides earlier orgs (needs tampering), closed PR history capped at 100 per project/role, sequential creator/reviewer searches. cargo test 107+5 ok, clippy clean.
