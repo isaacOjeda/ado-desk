@@ -18,11 +18,17 @@ import {
 import { usePersistentFilter } from "../filters/usePersistentFilter";
 import { WorkItemFilterBar } from "../filters/WorkItemFilterBar";
 import { PullRequestFilterBar } from "../filters/PullRequestFilterBar";
+import type { SearchHit } from "../search/api";
+import { recordRecent } from "../search/recents";
+import { requestQuickSearch } from "../search/events";
 
 interface Props {
   session: Session;
   onSignOut: () => void;
   onUnauthorized: () => void;
+  /** An item to open (from the quick search); handled once its organization is active. */
+  openRequest: SearchHit | null;
+  onOpenHandled: () => void;
 }
 
 type Selection =
@@ -44,11 +50,38 @@ function matches(query: string, ...values: (string | number)[]) {
   return !q || values.some((v) => String(v).toLowerCase().includes(q));
 }
 
-export function Workspace({ session, onSignOut, onUnauthorized }: Props) {
+function hitOf(organization: string, selection: NonNullable<Selection>): SearchHit {
+  return selection.kind === "workItem"
+    ? { kind: "workItem", organization, item: selection.workItem }
+    : { kind: "pullRequest", organization, item: selection.pullRequest };
+}
+
+export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onOpenHandled }: Props) {
   const [view, setView] = useState<View>("workItems");
   const [query, setQuery] = useState("");
-  const [selection, setSelection] = useState<Selection>(null);
+  const [selection, setSelectionState] = useState<Selection>(null);
   const organization = session.organization;
+
+  // Every opened item becomes a quick search "recent".
+  const setSelection = useCallback(
+    (next: Selection) => {
+      if (next) recordRecent(hitOf(organization, next));
+      setSelectionState(next);
+    },
+    [organization],
+  );
+
+  useEffect(() => {
+    if (!openRequest || openRequest.organization !== organization) return;
+    if (openRequest.kind === "workItem") {
+      setView("workItems");
+      setSelection({ kind: "workItem", workItem: openRequest.item });
+    } else {
+      setView("pullRequests");
+      setSelection({ kind: "pullRequest", pullRequest: openRequest.item });
+    }
+    onOpenHandled();
+  }, [openRequest, organization, setSelection, onOpenHandled]);
   const [workItemFilter, setWorkItemFilter] = usePersistentFilter(organization, "workItems", parseWorkItemFilter);
   const [pullRequestFilter, setPullRequestFilter] = usePersistentFilter(
     organization,
@@ -91,7 +124,7 @@ export function Workspace({ session, onSignOut, onUnauthorized }: Props) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [active, selection]);
+  }, [active, selection, setSelection]);
 
   const visibleWorkItems = useMemo(
     () =>
@@ -125,6 +158,7 @@ export function Workspace({ session, onSignOut, onUnauthorized }: Props) {
         }}
         onSignOut={onSignOut}
         onOpenSettings={openSettings}
+        onSearch={requestQuickSearch}
       />
 
       <main className="content">

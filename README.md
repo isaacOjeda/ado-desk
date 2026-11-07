@@ -23,6 +23,17 @@ Enter your organization (`contoso` or `https://dev.azure.com/contoso`) and the t
 The token is validated against Azure DevOps, then stored in the OS credential store
 (macOS Keychain / Windows Credential Manager / Secret Service). It never returns to the webview.
 
+## Quick search
+
+Press **⌘K** (Ctrl+K on Windows/Linux) or click *Search* in the sidebar:
+
+- `#123` opens work item 123, `!45` opens pull request 45, a bare number looks up both.
+- Other text (2+ characters) searches titles: work items through WIQL across every project, and
+  your own pull requests (author or reviewer, any status), since Azure DevOps has no title filter
+  for pull requests. Any pull request still opens by `!id`.
+- Arrows move, Enter opens in the app, ⌘Enter opens in Azure DevOps, Esc closes. With nothing
+  typed, it lists the items you opened recently (stored on this device only).
+
 ## Themes
 
 Settings > Appearance offers built-in reading themes for light and dark mode, translucency
@@ -54,6 +65,7 @@ src-tauri/src/
   credentials.rs          OS keychain storage
   azdo/client.rs          HTTP adapter for the Azure DevOps REST API 7.1
   azdo/model.rs           Domain types and pure payload mapping (unit tested)
+  search.rs               Quick search: query syntax, title WIQL, PR title filter
   themes/                 Open VSX search/import, vsix reader, VS Code color mapping, store
 ```
 

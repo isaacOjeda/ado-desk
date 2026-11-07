@@ -3,6 +3,9 @@ import { ApiError, api, onSessionChanged, subscribe, type Session } from "./lib/
 import { LoginView } from "./features/auth/LoginView";
 import { Workspace } from "./features/workspace/Workspace";
 import { onAddOrganizationRequested } from "./features/organizations/events";
+import { QuickSearch } from "./features/search/QuickSearch";
+import { onQuickSearchRequested, requestQuickSearch } from "./features/search/events";
+import type { SearchHit } from "./features/search/api";
 import { Spinner } from "./components/ui";
 import "./styles.css";
 
@@ -18,6 +21,9 @@ function message(err: unknown): string {
 export default function App() {
   const [auth, setAuth] = useState<AuthState>({ status: "restoring" });
   const [addingOrganization, setAddingOrganization] = useState(false);
+  const [searching, setSearching] = useState(false);
+  // An item picked in the quick search, waiting for the workspace of its organization.
+  const [openRequest, setOpenRequest] = useState<SearchHit | null>(null);
 
   useEffect(() => {
     api
@@ -51,10 +57,39 @@ export default function App() {
 
   useEffect(() => onAddOrganizationRequested(() => setAddingOrganization(true)), []);
 
-  // The add-organization screen belongs to a signed-in workspace.
+  // The add-organization screen and the quick search belong to a signed-in workspace.
   useEffect(() => {
-    if (auth.status !== "signedIn") setAddingOrganization(false);
+    if (auth.status !== "signedIn") {
+      setAddingOrganization(false);
+      setSearching(false);
+      setOpenRequest(null);
+    }
   }, [auth.status]);
+
+  // Cmd/Ctrl+K opens the quick search from the lists or a detail view.
+  const canSearch = auth.status === "signedIn" && !addingOrganization;
+  useEffect(() => {
+    if (!canSearch) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        requestQuickSearch();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    const stop = onQuickSearchRequested(() => setSearching(true));
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      stop();
+    };
+  }, [canSearch]);
+
+  const openHit = useCallback((hit: SearchHit) => {
+    setSearching(false);
+    setOpenRequest(hit);
+  }, []);
+  const closeSearch = useCallback(() => setSearching(false), []);
+  const openHandled = useCallback(() => setOpenRequest(null), []);
 
   // Signing out removes the active organization; Rust may switch to the next one.
   const signOut = useCallback(() => {
@@ -95,7 +130,12 @@ export default function App() {
             session={auth.session}
             onSignOut={signOut}
             onUnauthorized={expired}
+            openRequest={openRequest}
+            onOpenHandled={openHandled}
           />
+          {searching && (
+            <QuickSearch organization={auth.session.organization} onOpen={openHit} onClose={closeSearch} />
+          )}
           {addingOrganization && (
             <div className="org-overlay">
               <LoginView

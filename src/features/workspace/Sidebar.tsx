@@ -1,6 +1,7 @@
 import type { Session } from "../../lib/api";
 import { initials } from "../../lib/format";
 import { OrgSwitcher } from "../organizations/OrgSwitcher";
+import { MOD_KEY } from "../search/QuickSearch";
 
 export type View = "workItems" | "pullRequests";
 
@@ -11,6 +12,7 @@ interface Props {
   onSelect: (view: View) => void;
   onSignOut: () => void;
   onOpenSettings: () => void;
+  onSearch: () => void;
 }
 
 const NAV: { view: View; label: string; icon: string }[] = [
@@ -18,11 +20,19 @@ const NAV: { view: View; label: string; icon: string }[] = [
   { view: "pullRequests", label: "Pull requests", icon: "⇄" },
 ];
 
-export function Sidebar({ session, view, counts, onSelect, onSignOut, onOpenSettings }: Props) {
+export function Sidebar({ session, view, counts, onSelect, onSignOut, onOpenSettings, onSearch }: Props) {
   return (
     <aside className="sidebar">
       <div className="sidebar-top" data-tauri-drag-region />
       <OrgSwitcher session={session} />
+
+      <button className="nav-item nav-search" onClick={onSearch} title={`Search (${MOD_KEY}K)`}>
+        <span className="nav-icon" aria-hidden>
+          ⌕
+        </span>
+        <span>Search</span>
+        <kbd>{MOD_KEY}K</kbd>
+      </button>
 
       <nav className="nav">
         {NAV.map((item) => (
