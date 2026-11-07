@@ -1,4 +1,5 @@
 mod azdo;
+mod background;
 mod commands;
 mod credentials;
 mod error;
@@ -34,8 +35,10 @@ pub fn run() {
             app.manage(settings::SettingsState::load(path));
             let themes_path = app.path().app_config_dir()?.join(themes::store::FILE_NAME);
             app.manage(themes::ThemesState::load(themes_path));
+            background::install_tray(app.handle())?;
             Ok(())
         })
+        .on_window_event(background::on_window_event)
         .register_asynchronous_uri_scheme_protocol(rich_text::PROXY_SCHEME, |ctx, request, responder| {
             let app = ctx.app_handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -74,6 +77,15 @@ pub fn run() {
             themes::list_imported_themes,
             themes::remove_imported_theme,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            // Clicking the Dock icon brings back the hidden main window.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { has_visible_windows: false, .. } = event {
+                background::show_main(app);
+            }
+            #[cfg(not(target_os = "macos"))]
+            let _ = (app, event);
+        });
 }

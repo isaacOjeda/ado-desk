@@ -12,7 +12,7 @@ Branch: feat/global-search-bar · Delivery: ask-on-risk · Test runner: `cargo t
 
 ## Tasks
 - T1 [S5] Per-organization search deadline. Route: inline. Risk: item 5 (declares `tokio` with `time`, already in the dependency tree; Cargo.lock +1 line). Status: done, see L3.
-- T2 [S2] Background mode: tray icon and menu, close hides, Dock reopen. Route: inline. Risk: item 5 (Tauri `tray-icon` feature). Status: pending.
+- T2 [S2] Background mode: tray icon and menu, close hides, Dock reopen. Route: inline. Risk: item 5 (Tauri `tray-icon` feature). Status: done, see L4.
 - T3 [S3, S6] Global shortcut + `search` window + open in main window. Route: inline. Risk: items 2 (new window in the capability) and 5 (`tauri-plugin-global-shortcut`). Status: pending.
 - T4 [S4] Shortcut settings (Rust validation and registration, settings shape, recorder UI). Route: inline. Risk: none expected (optional new settings field). Status: pending.
 - T5 [S1-S6] Independent verifier (items 2, 5). Status: pending.
@@ -21,3 +21,4 @@ Branch: feat/global-search-bar · Delivery: ask-on-risk · Test runner: `cargo t
 - L1 (2026-11-07) User request: "en la 3. me gustaría si es posible tener un floating bar que aunque esté fuera de la aplicación, con un short cut, poder buscar un PR o ticket"; phase 1 merged ("yes"); window type: "let go for normal windows".
 - L2 Evidence: Tauri 2.12.5, tokio 1.54.1 already in Cargo.lock; capability `default` lists windows `main`, `settings`; opener only allows `https://*`; Settings window is created from its `tauri.conf.json` entry (`create: false`) by `open_settings_window`.
 - L3 T1: RED 1/1 (`with_deadline` stub) then GREEN; cargo test 158 + 5 ok, clippy clean. Each organization in `quick_search` runs under `ORGANIZATION_DEADLINE` (10 s); past it the organization lands in `unavailable` (Network error, fixed text) and the others answer.
+- L4 T2: `background.rs` (tray with Open/Settings…/Quit, main window close -> hide, macOS `RunEvent::Reopen` without visible windows -> show main); builder switched from `.run(ctx)` to `.build(ctx).run(handler)`. No unit test (GUI wiring only); cargo test 158 + 5 ok, clippy clean. Real-app check pending (T3 end).

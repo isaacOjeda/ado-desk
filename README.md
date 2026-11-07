@@ -37,6 +37,12 @@ Press **⌘K** (Ctrl+K on Windows/Linux) or click *Search* in the sidebar:
 - Arrows move, Enter opens in the app, ⌘Enter opens in Azure DevOps, Esc closes. With nothing
   typed, it lists the items you opened recently (stored on this device only).
 
+## Background mode
+
+Closing the main window hides it; ADO Desk keeps running behind its menu bar icon (Open ADO
+Desk, Settings…, Quit). Click the Dock icon or *Open ADO Desk* to bring the window back. Quit
+from the menu bar icon or with ⌘Q.
+
 ## Themes
 
 Settings > Appearance offers built-in reading themes for light and dark mode, translucency
