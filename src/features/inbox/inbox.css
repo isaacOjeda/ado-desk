@@ -1,0 +1,39 @@
+/* Inbox list (notifications found by the background checks). */
+
+.inbox-row .inbox-dot {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
+.inbox-row.is-unread .inbox-dot {
+  background: var(--accent);
+}
+
+.inbox-row.is-unread .row-title {
+  font-weight: 600;
+}
+
+.inbox-row:not(.is-unread) .row-title {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.inbox-icon {
+  width: 16px;
+  flex-shrink: 0;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+/* Unread count next to "Inbox" in the sidebar. */
+.nav-count.nav-unread {
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: 600;
+  text-align: center;
+}

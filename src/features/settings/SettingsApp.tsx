@@ -5,13 +5,15 @@ import { ErrorBanner } from "../../components/ui";
 import { AppearanceSection } from "./AppearanceSection";
 import { ProfileSection } from "./ProfileSection";
 import { ShortcutsSection } from "./ShortcutsSection";
+import { NotificationsSection } from "./NotificationsSection";
 import "./settings.css";
 
-type Section = "profile" | "appearance" | "shortcuts";
+type Section = "profile" | "appearance" | "notifications" | "shortcuts";
 
 const SECTIONS: { id: Section; label: string; icon: string }[] = [
   { id: "profile", label: "Profile", icon: "◉" },
   { id: "appearance", label: "Appearance", icon: "◐" },
+  { id: "notifications", label: "Notifications", icon: "◎" },
   { id: "shortcuts", label: "Shortcuts", icon: "⌘" },
 ];
 
@@ -175,6 +177,8 @@ export function SettingsApp() {
             />
           ) : section === "appearance" ? (
             <AppearanceSection settings={settings} onChange={changeSettings} />
+          ) : section === "notifications" ? (
+            <NotificationsSection settings={settings} onChange={changeSettings} />
           ) : (
             <ShortcutsSection settings={settings} onChange={changeSettings} />
           )}

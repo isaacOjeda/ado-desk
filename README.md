@@ -55,6 +55,23 @@ key; Shift alone is not enough). A combination another app already uses is rejec
 previous one stays active. If the saved shortcut is taken when ADO Desk starts, the bar is still
 available from the menu bar icon.
 
+## Notifications
+
+While ADO Desk runs (also with the window closed), it checks every configured organization every
+5 minutes (Settings > Notifications: 1 to 60 minutes, or off) for:
+
+- pull requests waiting for your review (you are a reviewer and have not voted),
+- open work items newly assigned to you,
+- new comments by others on your active pull requests and your assigned work items.
+
+New items show as native notifications (a single summary when there are more than 3) and in the
+**Inbox**, with an unread count in the sidebar, on the Dock icon and next to the menu bar icon.
+Desktop notifications cannot open an item when clicked, so open it from the Inbox. The first check
+of an organization only records what is already there. Seen state and the Inbox (last 100 items)
+are stored in `notification-state.json` and `inbox.json` in the app config directory; no comment
+text is stored, only titles and author names. In `pnpm tauri dev` macOS may attribute or hold
+notifications differently than in the bundled app.
+
 ## Themes
 
 Settings > Appearance offers built-in reading themes for light and dark mode, translucency
@@ -89,6 +106,7 @@ src-tauri/src/
   search.rs               Quick search: query syntax, title WIQL, PR title filter
   search_bar.rs           Floating search window, global shortcut validation/registration
   background.rs           Menu bar icon, hide-on-close, Dock reopen
+  notifications/          Background checks: rules (what is new), fetch, Inbox store, loop
   themes/                 Open VSX search/import, vsix reader, VS Code color mapping, store
 ```
 

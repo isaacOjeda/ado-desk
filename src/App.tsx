@@ -4,7 +4,7 @@ import { LoginView } from "./features/auth/LoginView";
 import { Workspace } from "./features/workspace/Workspace";
 import { onAddOrganizationRequested } from "./features/organizations/events";
 import { QuickSearch } from "./features/search/QuickSearch";
-import { onQuickSearchRequested, requestQuickSearch } from "./features/search/events";
+import { onOpenRequested, onQuickSearchRequested, requestQuickSearch } from "./features/search/events";
 import { searchApi, type SearchHit } from "./features/search/api";
 import { isHit } from "./features/search/recents";
 import { Spinner } from "./components/ui";
@@ -108,13 +108,17 @@ export default function App() {
   const [openError, setOpenError] = useState<string | null>(null);
   useEffect(() => {
     if (activeOrganization === null) return;
-    return subscribe(() =>
-      searchApi.onOpenFromBar((payload) => {
-        if (!isHit(payload)) return;
-        setOpenError(null);
-        openHit(payload).catch((err: unknown) => setOpenError(`Could not open the item: ${message(err)}`));
-      }),
-    );
+    const open = (payload: unknown) => {
+      if (!isHit(payload)) return;
+      setOpenError(null);
+      openHit(payload).catch((err: unknown) => setOpenError(`Could not open the item: ${message(err)}`));
+    };
+    const stopInbox = onOpenRequested(open);
+    const stopBar = subscribe(() => searchApi.onOpenFromBar(open));
+    return () => {
+      stopInbox();
+      stopBar();
+    };
   }, [activeOrganization, openHit]);
 
   const closeSearch = useCallback(() => {

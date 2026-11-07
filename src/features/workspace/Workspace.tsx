@@ -21,6 +21,8 @@ import { PullRequestFilterBar } from "../filters/PullRequestFilterBar";
 import type { SearchHit } from "../search/api";
 import { recordRecent } from "../search/recents";
 import { requestQuickSearch } from "../search/events";
+import { InboxView } from "../inbox/InboxView";
+import { inboxApi, useInbox } from "../inbox/api";
 
 interface Props {
   session: Session;
@@ -37,6 +39,7 @@ type Selection =
   | null;
 
 const TITLES: Record<View, string> = {
+  inbox: "Inbox",
   workItems: "My work items",
   pullRequests: "Pull requests",
 };
@@ -73,11 +76,12 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
 
   useEffect(() => {
     if (!openRequest || openRequest.organization !== organization) return;
+    // Items opened from the Inbox return to it on Back.
     if (openRequest.kind === "workItem") {
-      setView("workItems");
+      setView((current) => (current === "inbox" ? current : "workItems"));
       setSelection({ kind: "workItem", workItem: openRequest.item });
     } else {
-      setView("pullRequests");
+      setView((current) => (current === "inbox" ? current : "pullRequests"));
       setSelection({ kind: "pullRequest", pullRequest: openRequest.item });
     }
     onOpenHandled();
@@ -98,6 +102,8 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
   );
   const projects = useResource(useCallback(() => filtersApi.listProjects(), [organization]));
   const active = view === "workItems" ? workItems : pullRequests;
+  const inbox = useInbox();
+  const unread = inbox?.filter((item) => !item.read).length ?? 0;
 
   useEffect(() => {
     const failed: (ApiError | null)[] = [workItems.error, pullRequests.error];
@@ -119,12 +125,13 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
       }
       if (!selection && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "r") {
         e.preventDefault();
-        active.reload();
+        if (view === "inbox") void inboxApi.checkNow();
+        else active.reload();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [active, selection, setSelection]);
+  }, [active, selection, setSelection, view]);
 
   const visibleWorkItems = useMemo(
     () =>
@@ -149,6 +156,7 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
         session={session}
         view={view}
         counts={{
+          inbox: unread,
           workItems: workItems.data?.length ?? null,
           pullRequests: pullRequests.data?.length ?? null,
         }}
@@ -180,12 +188,23 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          <button className="btn btn-ghost" onClick={active.reload} disabled={active.loading} title="Refresh (⌘R)">
-            {active.loading ? <Spinner /> : "↻"}
-          </button>
+          {view === "inbox" ? (
+            <>
+              <button className="btn btn-ghost btn-sm" onClick={() => void inboxApi.markRead()} disabled={unread === 0}>
+                Mark all read
+              </button>
+              <button className="btn btn-ghost" onClick={() => void inboxApi.checkNow()} title="Check now">
+                ↻
+              </button>
+            </>
+          ) : (
+            <button className="btn btn-ghost" onClick={active.reload} disabled={active.loading} title="Refresh (⌘R)">
+              {active.loading ? <Spinner /> : "↻"}
+            </button>
+          )}
         </header>
 
-        {view === "workItems" ? (
+        {view === "inbox" ? null : view === "workItems" ? (
           <WorkItemFilterBar
             key={organization}
             filter={workItemFilter}
@@ -201,8 +220,10 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
         )}
 
         <section className="panel">
-          {active.error && <ErrorBanner message={active.error.message} onRetry={active.reload} />}
-          {active.loading && !active.data ? (
+          {view !== "inbox" && active.error && <ErrorBanner message={active.error.message} onRetry={active.reload} />}
+          {view === "inbox" ? (
+            <InboxView items={inbox} query={query} />
+          ) : active.loading && !active.data ? (
             <div className="loading">
               <Spinner />
             </div>

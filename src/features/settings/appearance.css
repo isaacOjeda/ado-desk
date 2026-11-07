@@ -459,3 +459,19 @@
   border-color: var(--accent);
   color: var(--accent-strong);
 }
+
+/* Notifications section. */
+.notifications-interval {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.notifications-interval select {
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+}

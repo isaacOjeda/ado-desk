@@ -3,7 +3,7 @@ import { initials } from "../../lib/format";
 import { OrgSwitcher } from "../organizations/OrgSwitcher";
 import { MOD_KEY } from "../search/QuickSearch";
 
-export type View = "workItems" | "pullRequests";
+export type View = "inbox" | "workItems" | "pullRequests";
 
 interface Props {
   session: Session;
@@ -16,6 +16,7 @@ interface Props {
 }
 
 const NAV: { view: View; label: string; icon: string }[] = [
+  { view: "inbox", label: "Inbox", icon: "◎" },
   { view: "workItems", label: "My work items", icon: "▤" },
   { view: "pullRequests", label: "Pull requests", icon: "⇄" },
 ];
@@ -45,7 +46,11 @@ export function Sidebar({ session, view, counts, onSelect, onSignOut, onOpenSett
               {item.icon}
             </span>
             <span>{item.label}</span>
-            {counts[item.view] != null && <span className="nav-count">{counts[item.view]}</span>}
+            {item.view === "inbox" ? (
+              !!counts.inbox && <span className="nav-count nav-unread">{counts.inbox}</span>
+            ) : (
+              counts[item.view] != null && <span className="nav-count">{counts[item.view]}</span>
+            )}
           </button>
         ))}
       </nav>
