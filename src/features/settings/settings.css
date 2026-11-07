@@ -12,7 +12,7 @@
 .settings-nav {
   display: flex;
   flex-direction: column;
-  background: var(--glass-sidebar, var(--sidebar));
+  background: var(--sidebar);
   border-right: 1px solid var(--border);
   padding: 0 10px 12px;
 }
@@ -83,7 +83,7 @@
   height: 52px;
   flex-shrink: 0;
   padding: 0 28px;
-  background: var(--glass-chrome, var(--surface));
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
 
@@ -202,4 +202,13 @@
 
 .btn-danger:hover:not(:disabled) {
   background: var(--surface-hover);
+}
+
+/* Glass layers only when translucency is on (see ThemeRoot / supportsTranslucency). */
+:root[data-translucency="on"] .settings-nav {
+  background: var(--glass-sidebar, var(--sidebar));
+}
+
+:root[data-translucency="on"] .settings-header {
+  background: var(--glass-chrome, var(--surface));
 }

@@ -63,11 +63,21 @@ impl SettingsState {
     }
 }
 
-/// Trims theme ids and replaces empty ones with the defaults.
+/// Longest theme id accepted from the webview.
+pub const MAX_THEME_ID_LEN: usize = 64;
+
+/// Theme ids are short slugs (`[a-z0-9-]`), which also fits ids derived from Open VSX themes.
+fn is_valid_theme_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= MAX_THEME_ID_LEN
+        && id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
+/// Trims theme ids and replaces empty, oversized or malformed ones with the defaults.
 pub fn normalize(mut settings: Settings) -> Settings {
     let fix = |id: &mut String, default: &str| {
         let trimmed = id.trim();
-        *id = if trimmed.is_empty() { default.to_string() } else { trimmed.to_string() };
+        *id = if is_valid_theme_id(trimmed) { trimmed.to_string() } else { default.to_string() };
     };
     fix(&mut settings.appearance.light_theme, DEFAULT_LIGHT_THEME);
     fix(&mut settings.appearance.dark_theme, DEFAULT_DARK_THEME);
@@ -122,6 +132,30 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn normalize_replaces_malformed_or_oversized_theme_ids_with_defaults() {
+        let mut settings = Settings::default();
+        settings.appearance.light_theme = "</style><script>x</script>".into();
+        settings.appearance.dark_theme = "a".repeat(65);
+
+        let fixed = normalize(settings);
+
+        assert_eq!(fixed.appearance.light_theme, DEFAULT_LIGHT_THEME);
+        assert_eq!(fixed.appearance.dark_theme, DEFAULT_DARK_THEME);
+    }
+
+    #[test]
+    fn normalize_keeps_valid_theme_ids() {
+        let mut settings = Settings::default();
+        settings.appearance.light_theme = " sepia ".into();
+        settings.appearance.dark_theme = "open-vsx-theme-2".into();
+
+        let fixed = normalize(settings);
+
+        assert_eq!(fixed.appearance.light_theme, "sepia");
+        assert_eq!(fixed.appearance.dark_theme, "open-vsx-theme-2");
     }
 
     #[test]
