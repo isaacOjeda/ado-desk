@@ -28,6 +28,8 @@ pub const MAX_QUERY_CHARS: usize = 100;
 pub const MIN_TEXT_CHARS: usize = 2;
 /// Results per kind (work items, pull requests) and organization.
 pub const MAX_HITS_PER_KIND: usize = 20;
+/// Longest one organization may take to answer; slower ones are reported unavailable.
+pub const ORGANIZATION_DEADLINE: Duration = Duration::from_secs(10);
 /// How long the user's own pull requests are reused between title searches.
 const OWN_PULL_REQUESTS_TTL: Duration = Duration::from_secs(60);
 
@@ -109,6 +111,16 @@ pub fn filter_pull_requests(prs: &[PullRequest], text: &str) -> Vec<PullRequest>
 pub fn cap_work_items(mut items: Vec<WorkItem>) -> Vec<WorkItem> {
     items.truncate(MAX_HITS_PER_KIND);
     items
+}
+
+/// Runs `search` with a deadline; past it the organization counts as failed.
+pub async fn with_deadline<T>(
+    deadline: Duration,
+    search: impl std::future::Future<Output = QueryResult<T>>,
+) -> QueryResult<T> {
+    tokio::time::timeout(deadline, search)
+        .await
+        .unwrap_or_else(|_| Err(AppError::Network("the organization took too long to answer".into()).into()))
 }
 
 /// Organizations to search: the active one first, then the others in configured order.
@@ -259,7 +271,9 @@ pub async fn quick_search(
     let (search, query) = (&*search, &query);
     let outcomes = futures::future::join_all(clients.into_iter().map(|(organization, client)| async move {
         let outcome = match client {
-            Ok(client) => search_organization(&client, search, query).await,
+            Ok(client) => {
+                with_deadline(ORGANIZATION_DEADLINE, search_organization(&client, search, query)).await
+            }
             Err(err) => Err(err.into()),
         };
         (organization, outcome)
@@ -447,5 +461,19 @@ mod tests {
         let order: Vec<&str> = results.hits.iter().map(organization_of).collect();
         assert_eq!(order, vec!["fabrikam", "fabrikam", "tailspin"]);
         assert_eq!(results.unavailable, vec!["contoso", "woodgrove"]);
+    }
+
+    #[test]
+    fn an_organization_past_its_deadline_fails_and_a_fast_one_answers() {
+        tauri::async_runtime::block_on(async {
+            let slow = with_deadline(Duration::from_millis(20), async {
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                Ok::<_, QueryError>(1)
+            });
+            assert!(matches!(slow.await, Err(QueryError::App(AppError::Network(_)))));
+
+            let fast = with_deadline(Duration::from_secs(5), async { Ok::<_, QueryError>(7) });
+            assert_eq!(fast.await.unwrap(), 7);
+        });
     }
 }
