@@ -1,19 +1,36 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
-import type { Session } from "../../lib/api";
+import type { OrganizationSummary, Session } from "../../lib/api";
 import { Avatar, EmptyState, Spinner } from "../../components/ui";
+import { OrganizationsCard } from "../organizations/OrganizationsCard";
 
 interface Props {
   /** `undefined` while loading, `null` when signed out. */
   session: Session | null | undefined;
+  /** `undefined` while loading. */
+  organizations: OrganizationSummary[] | undefined;
+  /** Organization with a switch or removal in flight. */
+  busyOrganization: string | null;
   signingOut: boolean;
   onSignOut: () => void;
+  onSwitch: (organization: string) => void;
+  onRemove: (organization: string) => void;
+  onAdded: (session: Session) => void;
 }
 
 export function organizationUrl(organization: string): string {
   return `https://dev.azure.com/${encodeURIComponent(organization)}`;
 }
 
-export function ProfileSection({ session, signingOut, onSignOut }: Props) {
+export function ProfileSection({
+  session,
+  organizations,
+  busyOrganization,
+  signingOut,
+  onSignOut,
+  onSwitch,
+  onRemove,
+  onAdded,
+}: Props) {
   if (session === undefined) {
     return (
       <div className="settings-loading">
@@ -22,12 +39,25 @@ export function ProfileSection({ session, signingOut, onSignOut }: Props) {
     );
   }
 
+  const organizationsCard = (
+    <OrganizationsCard
+      organizations={organizations}
+      busy={busyOrganization}
+      onSwitch={onSwitch}
+      onRemove={onRemove}
+      onAdded={onAdded}
+    />
+  );
+
   if (session === null) {
     return (
-      <EmptyState
-        title="You're not signed in"
-        hint="Sign in from the main window with your organization and a personal access token."
-      />
+      <div className="settings-stack">
+        <EmptyState
+          title="You're not signed in"
+          hint="Switch to one of your organizations or add one with a personal access token."
+        />
+        {organizationsCard}
+      </div>
     );
   }
 
@@ -44,7 +74,7 @@ export function ProfileSection({ session, signingOut, onSignOut }: Props) {
       </section>
 
       <section className="settings-card">
-        <h2 className="settings-card-title">Organization</h2>
+        <h2 className="settings-card-title">Active organization</h2>
         <dl className="settings-rows">
           <div className="settings-row">
             <dt>Name</dt>
@@ -65,10 +95,12 @@ export function ProfileSection({ session, signingOut, onSignOut }: Props) {
         </dl>
       </section>
 
+      {organizationsCard}
+
       <div className="settings-actions">
         <button className="btn btn-danger" onClick={onSignOut} disabled={signingOut}>
           {signingOut ? <Spinner /> : null}
-          Sign out
+          Sign out of {session.organization}
         </button>
       </div>
     </div>

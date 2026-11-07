@@ -1,5 +1,6 @@
 import type { Session } from "../../lib/api";
 import { initials } from "../../lib/format";
+import { OrgSwitcher } from "../organizations/OrgSwitcher";
 
 export type View = "workItems" | "pullRequests";
 
@@ -21,12 +22,7 @@ export function Sidebar({ session, view, counts, onSelect, onSignOut, onOpenSett
   return (
     <aside className="sidebar">
       <div className="sidebar-top" data-tauri-drag-region />
-      <div className="org">
-        <span className="brand-mark small" aria-hidden>
-          ◆
-        </span>
-        <span className="org-name">{session.organization}</span>
-      </div>
+      <OrgSwitcher session={session} />
 
       <nav className="nav">
         {NAV.map((item) => (
@@ -57,7 +53,7 @@ export function Sidebar({ session, view, counts, onSelect, onSignOut, onOpenSett
         >
           <span aria-hidden>⚙</span>
         </button>
-        <button className="btn btn-ghost btn-sm" onClick={onSignOut}>
+        <button className="btn btn-ghost btn-sm" onClick={onSignOut} title={`Sign out of ${session.organization}`}>
           Sign out
         </button>
       </div>

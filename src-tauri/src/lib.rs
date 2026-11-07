@@ -8,15 +8,16 @@ mod rich_text;
 mod settings;
 mod work_items;
 
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 
-use azdo::AzdoClient;
 use tauri::Manager;
 
-/// The signed-in client, shared across commands. `None` while signed out.
+/// Shared across commands: the connected organizations (the active one serves every
+/// Azure DevOps call) and the keychain-backed organization store.
 #[derive(Default)]
 pub struct AppState {
-    client: RwLock<Option<Arc<AzdoClient>>>,
+    organizations: RwLock<commands::Organizations>,
+    store: credentials::OrganizationStore,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -40,6 +41,10 @@ pub fn run() {
             commands::restore_session,
             commands::logout,
             commands::current_session,
+            commands::list_organizations,
+            commands::add_organization,
+            commands::switch_organization,
+            commands::remove_organization,
             commands::get_settings,
             commands::update_settings,
             commands::open_settings_window,

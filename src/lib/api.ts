@@ -9,7 +9,20 @@ export interface Session {
   email: string | null;
 }
 
-/** Emitted by Rust to every window after sign-in or sign-out; payload is the session or null. */
+/** A configured organization. Its PAT stays in the keychain and never reaches the webview. */
+export interface OrganizationSummary {
+  /** Canonical (lowercase) organization name. */
+  organization: string;
+  active: boolean;
+  /** Known only once the organization connected during this run. */
+  displayName: string | null;
+  email: string | null;
+}
+
+/**
+ * Emitted by Rust to every window whenever the active organization changes (sign-in, switch,
+ * removal, sign-out); payload is the active session or null.
+ */
 export const SESSION_CHANGED_EVENT = "session-changed";
 
 export function onSessionChanged(handler: (session: Session | null) => void): Promise<UnlistenFn> {
@@ -99,7 +112,17 @@ export async function call<T>(command: string, args?: Record<string, unknown>): 
 export const api = {
   login: (organization: string, pat: string) => call<Session>("login", { organization, pat }),
   restoreSession: () => call<Session | null>("restore_session"),
-  logout: () => call<void>("logout"),
+  /** Signs out of the active organization; resolves with the organization now active, if any. */
+  logout: () => call<Session | null>("logout"),
+  listOrganizations: () => call<OrganizationSummary[]>("list_organizations"),
+  /** Validates the PAT, stores it and makes the organization active (replaces an existing PAT). */
+  addOrganization: (organization: string, pat: string) =>
+    call<Session>("add_organization", { organization, pat }),
+  /** On failure the previous organization stays active. */
+  switchOrganization: (organization: string) => call<Session>("switch_organization", { organization }),
+  /** Resolves with the organization now active, or null when none is left. */
+  removeOrganization: (organization: string) =>
+    call<Session | null>("remove_organization", { organization }),
   listWorkItems: () => call<WorkItem[]>("list_work_items"),
   listPullRequests: () => call<PullRequest[]>("list_pull_requests"),
 };
