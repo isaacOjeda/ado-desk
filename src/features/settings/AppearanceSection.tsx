@@ -1,9 +1,12 @@
-// Appearance settings: mode, the light/dark theme choices and translucency. Rendered by the Settings window.
+// Appearance settings: mode, the light/dark theme choices, translucency and Open VSX imports. Rendered by the Settings window.
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { ApiError } from "../../lib/api";
 import type { AppearanceSettings, Settings, ThemeMode } from "../../lib/settings";
+import { themesApi } from "../../themes/api";
 import { useThemes } from "../../themes/ThemeRoot";
 import { supportsTranslucency, themeCssVariables } from "../../themes/tokens";
 import { DEFAULT_THEME_IDS, type Theme, type ThemeKind } from "../../themes/types";
+import { ThemeImporter } from "./ThemeImporter";
 import "./appearance.css";
 
 export interface AppearanceSectionProps {
@@ -90,7 +93,7 @@ export function AppearanceSection({ settings, onChange }: AppearanceSectionProps
         onCommit={(glassIntensity) => update({ glassIntensity })}
       />
 
-      <p className="appearance-note">Importing themes from Open VSX is coming later.</p>
+      <ThemeImporter />
     </div>
   );
 }
@@ -105,10 +108,19 @@ interface ThemePickerProps {
 }
 
 function ThemePicker({ title, kind, themes, selected, inUse, onSelect }: ThemePickerProps) {
+  const [removeError, setRemoveError] = useState<string | null>(null);
   const options = themes.filter((theme) => theme.kind === kind);
   // An unknown stored id paints the default, so show the default as selected.
   const effective = options.some((t) => t.id === selected) ? selected : DEFAULT_THEME_IDS[kind];
   const labelId = `appearance-${kind}-theme`;
+
+  // Removing the selected theme needs no settings change: an unknown id paints the default of its kind.
+  const remove = (theme: Theme) => {
+    setRemoveError(null);
+    themesApi.remove(theme.id).catch((error) => {
+      setRemoveError(error instanceof ApiError ? error.message : "Could not remove the theme.");
+    });
+  };
 
   return (
     <section className="appearance-group">
@@ -124,9 +136,15 @@ function ThemePicker({ title, kind, themes, selected, inUse, onSelect }: ThemePi
             selected={theme.id === effective}
             isDefault={theme.id === DEFAULT_THEME_IDS[kind]}
             onSelect={() => onSelect(theme.id)}
+            onRemove={theme.source ? () => remove(theme) : undefined}
           />
         ))}
       </div>
+      {removeError && (
+        <p className="theme-import-notice is-error" role="alert">
+          {removeError}
+        </p>
+      )}
     </section>
   );
 }
@@ -136,50 +154,70 @@ function ThemeCard({
   selected,
   isDefault,
   onSelect,
+  onRemove,
 }: {
   theme: Theme;
   selected: boolean;
   isDefault: boolean;
   onSelect: () => void;
+  /** Only for imported themes. */
+  onRemove?: () => void;
 }) {
   // The preview re-declares the theme's tokens locally, so it paints with that theme regardless of the active one.
   const previewVars = themeCssVariables(theme.colors) as CSSProperties;
 
+  const source = theme.source;
+
   return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      className={`theme-card${selected ? " is-selected" : ""}`}
-      onClick={onSelect}
-    >
-      <span className="theme-preview" style={previewVars} aria-hidden>
-        <span className="theme-preview-sidebar">
-          <span className="theme-preview-nav is-active" />
-          <span className="theme-preview-nav" />
-          <span className="theme-preview-nav" />
-        </span>
-        <span className="theme-preview-main">
-          <span className="theme-preview-bar" />
-          <span className="theme-preview-page">
-            <span className="theme-preview-title" />
-            <span className="theme-preview-line" />
-            <span className="theme-preview-line" />
-            <span className="theme-preview-line is-short" />
-            <span className="theme-preview-chips">
-              <span className="theme-preview-chip is-accent" />
-              <span className="theme-preview-chip is-green" />
-              <span className="theme-preview-chip is-amber" />
-              <span className="theme-preview-chip is-red" />
+    <div className="theme-card-slot">
+      <button
+        type="button"
+        role="radio"
+        aria-checked={selected}
+        className={`theme-card${selected ? " is-selected" : ""}`}
+        title={source ? `${source.displayName} (${source.namespace}.${source.name} ${source.version})` : undefined}
+        onClick={onSelect}
+      >
+        <span className="theme-preview" style={previewVars} aria-hidden>
+          <span className="theme-preview-sidebar">
+            <span className="theme-preview-nav is-active" />
+            <span className="theme-preview-nav" />
+            <span className="theme-preview-nav" />
+          </span>
+          <span className="theme-preview-main">
+            <span className="theme-preview-bar" />
+            <span className="theme-preview-page">
+              <span className="theme-preview-title" />
+              <span className="theme-preview-line" />
+              <span className="theme-preview-line" />
+              <span className="theme-preview-line is-short" />
+              <span className="theme-preview-chips">
+                <span className="theme-preview-chip is-accent" />
+                <span className="theme-preview-chip is-green" />
+                <span className="theme-preview-chip is-amber" />
+                <span className="theme-preview-chip is-red" />
+              </span>
             </span>
           </span>
         </span>
-      </span>
-      <span className="theme-card-footer">
-        <span className="theme-card-name">{theme.name}</span>
-        {isDefault && <span className="theme-card-tag">Default</span>}
-      </span>
-    </button>
+        <span className="theme-card-footer">
+          <span className="theme-card-name">{theme.name}</span>
+          {isDefault && <span className="theme-card-tag">Default</span>}
+          {source && <span className="theme-card-tag is-imported">Open VSX</span>}
+        </span>
+      </button>
+      {onRemove && (
+        <button
+          type="button"
+          className="theme-card-remove"
+          aria-label={`Remove ${theme.name}`}
+          title="Remove theme"
+          onClick={onRemove}
+        >
+          ×
+        </button>
+      )}
+    </div>
   );
 }
 

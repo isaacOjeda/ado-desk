@@ -1,10 +1,10 @@
 // Theme data model. Built-in themes live in `builtin.json`; every key in `ThemeColors`
 // becomes a CSS custom property on <html> (camelCase -> --kebab-case, see `tokens.ts`).
 //
-// Open VSX / VS Code import (not built yet): a VS Code color theme is a JSON file with a
-// `type` ("light" | "dark" | "hc*") and a `colors` map. The `vscode` column below names the
-// `colors` entries a future importer should read for each key, first match wins; keys
-// marked "derived" have no direct equivalent and should be computed (mixing or alpha).
+// Open VSX / VS Code import: a VS Code color theme is a JSON file with a `type` and a
+// `colors` map. The `vscode` column below names the `colors` entries the importer
+// (src-tauri/src/themes/vscode.rs) reads for each key, first match wins; keys marked
+// "derived" have no direct equivalent and are computed (mixing or alpha).
 //
 // Colors are hex strings: `#rrggbb` for opaque tokens (required for every token the
 // contrast test checks) and `#rrggbbaa` for translucent layers, shadows and diff tints.
@@ -70,12 +70,22 @@ export interface ThemeColors {
 
 export type ThemeToken = keyof ThemeColors;
 
+/** The Open VSX extension an imported theme came from. */
+export interface ThemeSource {
+  namespace: string;
+  name: string;
+  displayName: string;
+  version: string;
+}
+
 export interface Theme {
   id: string;
   name: string;
-  /** vscode: `type` ("light" | "dark"; high-contrast variants map to their base). */
+  /** vscode: `uiTheme` / `type` ("light" | "dark"; high-contrast variants map to their base). */
   kind: ThemeKind;
   colors: ThemeColors;
+  /** Only on imported themes (ids start with `ovsx-`). */
+  source?: ThemeSource;
 }
 
 /** Defaults per kind; mirrors `DEFAULT_SETTINGS` in src/lib/settings.ts. */

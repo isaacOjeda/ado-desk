@@ -85,7 +85,11 @@ export type ApiErrorKind =
   | "api"
   | "network"
   | "decode"
-  | "credentials";
+  | "credentials"
+  | "invalidThemeSearch"
+  | "invalidExtension"
+  | "openVsx"
+  | "themeImport";
 
 export class ApiError extends Error {
   constructor(

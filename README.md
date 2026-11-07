@@ -23,6 +23,25 @@ Enter your organization (`contoso` or `https://dev.azure.com/contoso`) and the t
 The token is validated against Azure DevOps, then stored in the OS credential store
 (macOS Keychain / Windows Credential Manager / Secret Service). It never returns to the webview.
 
+## Themes
+
+Settings > Appearance offers built-in reading themes for light and dark mode, translucency
+(macOS) and a glass slider that applies to the whole window.
+
+**Import from Open VSX**: click *Browse themes*, search, and import a VS Code color theme
+extension. Every color theme in it is added to the Light or Dark picker (hover a card to
+remove it). Notes:
+
+- This is the only network call outside Azure DevOps. It runs in Rust, only when you open the
+  browser or search, and only against `https://open-vsx.org` (downloads may redirect to Open
+  VSX storage over HTTPS). Nothing about your organizations is sent.
+- The `.vsix` is read in memory with size caps and never unpacked to disk. Only the theme
+  colors are kept, mapped onto the app's tokens; tokens a theme does not define are derived
+  or come from the default built-in theme.
+- Imported themes are stored in `imported-themes.json` in the app config directory.
+  Reimporting an extension replaces its themes.
+- Imported themes are not contrast-checked like the built-in ones.
+
 ## Architecture
 
 ```
@@ -35,6 +54,7 @@ src-tauri/src/
   credentials.rs          OS keychain storage
   azdo/client.rs          HTTP adapter for the Azure DevOps REST API 7.1
   azdo/model.rs           Domain types and pure payload mapping (unit tested)
+  themes/                 Open VSX search/import, vsix reader, VS Code color mapping, store
 ```
 
 - Work items: WIQL `[System.AssignedTo] = @Me` excluding Closed/Done/Removed, up to 200.
@@ -44,6 +64,7 @@ src-tauri/src/
 
 ```bash
 cd src-tauri && cargo test
+cargo test live_open_vsx -- --ignored   # optional: imports real themes from open-vsx.org
 ```
 
 ## Next steps

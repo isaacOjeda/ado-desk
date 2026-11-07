@@ -2,12 +2,15 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { DEFAULT_SETTINGS, settingsApi, type AppearanceSettings, type Settings } from "../lib/settings";
-import { applyTheme, BUILTIN_THEMES, resolveKind, resolveTheme } from "./tokens";
+import { themesApi } from "./api";
+import { applyTheme, BUILTIN_THEMES, parseImportedThemes, resolveKind, resolveTheme } from "./tokens";
 import type { Theme, ThemeKind } from "./types";
 
 const DARK_QUERY = "(prefers-color-scheme: dark)";
 /** Last applied appearance, so a relaunch paints the chosen theme before settings load. */
 const CACHE_KEY = "ado-desk.appearance";
+/** Last known imported themes, so a relaunch can paint an imported theme before Rust answers. */
+const IMPORTED_CACHE_KEY = "ado-desk.imported-themes";
 
 function prefersDarkNow(): boolean {
   try {
@@ -35,13 +38,36 @@ function cacheAppearance(appearance: AppearanceSettings) {
   }
 }
 
+function readCachedImported(): Theme[] {
+  try {
+    const raw = localStorage.getItem(IMPORTED_CACHE_KEY);
+    if (raw) return parseImportedThemes(JSON.parse(raw));
+  } catch {
+    // Storage unavailable or corrupted: Rust's list arrives shortly.
+  }
+  return [];
+}
+
+function cacheImported(themes: readonly Theme[]) {
+  try {
+    localStorage.setItem(IMPORTED_CACHE_KEY, JSON.stringify(themes));
+  } catch {
+    // Best effort only.
+  }
+}
+
+function catalog(imported: readonly Theme[]): readonly Theme[] {
+  return imported.length ? [...BUILTIN_THEMES, ...imported] : BUILTIN_THEMES;
+}
+
 // Paint synchronously at import time (before React's first render) to avoid a flash of unstyled
 // or wrong-theme content: the stylesheet has no color fallbacks of its own.
 const initialAppearance = readCachedAppearance();
 const initialPrefersDark = prefersDarkNow();
+const initialImported = readCachedImported();
 applyTheme(
   document.documentElement,
-  resolveTheme(BUILTIN_THEMES, initialAppearance, initialPrefersDark),
+  resolveTheme(catalog(initialImported), initialAppearance, initialPrefersDark),
   initialAppearance.translucency,
   initialAppearance.glassIntensity,
 );
@@ -56,8 +82,8 @@ export interface ThemeState {
 }
 
 const ThemeContext = createContext<ThemeState>({
-  themes: BUILTIN_THEMES,
-  theme: resolveTheme(BUILTIN_THEMES, initialAppearance, initialPrefersDark),
+  themes: catalog(initialImported),
+  theme: resolveTheme(catalog(initialImported), initialAppearance, initialPrefersDark),
   kind: resolveKind(initialAppearance.mode, initialPrefersDark),
   settings: { ...DEFAULT_SETTINGS, appearance: initialAppearance },
 });
@@ -70,6 +96,35 @@ export function useThemes(): ThemeState {
 export function ThemeRoot({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings>(() => ({ ...DEFAULT_SETTINGS, appearance: initialAppearance }));
   const [prefersDark, setPrefersDark] = useState(initialPrefersDark);
+  const [imported, setImported] = useState<readonly Theme[]>(initialImported);
+
+  useEffect(() => {
+    let active = true;
+    const accept = (themes: unknown) => {
+      if (!active) return;
+      const parsed = parseImportedThemes(themes);
+      setImported(parsed);
+      cacheImported(parsed);
+    };
+    themesApi
+      .list()
+      .then(accept)
+      .catch(() => {});
+
+    let unlisten: (() => void) | undefined;
+    try {
+      themesApi
+        .onChanged(accept)
+        .then((stop) => (active ? (unlisten = stop) : stop()))
+        .catch(() => {});
+    } catch {
+      // Not running inside Tauri: built-in themes only.
+    }
+    return () => {
+      active = false;
+      unlisten?.();
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -108,7 +163,8 @@ export function ThemeRoot({ children }: { children: ReactNode }) {
 
   const { appearance } = settings;
   const kind = resolveKind(appearance.mode, prefersDark);
-  const theme = useMemo(() => resolveTheme(BUILTIN_THEMES, appearance, prefersDark), [appearance, prefersDark]);
+  const themes = useMemo(() => catalog(imported), [imported]);
+  const theme = useMemo(() => resolveTheme(themes, appearance, prefersDark), [themes, appearance, prefersDark]);
 
   useEffect(() => {
     applyTheme(document.documentElement, theme, appearance.translucency, appearance.glassIntensity);
@@ -128,8 +184,8 @@ export function ThemeRoot({ children }: { children: ReactNode }) {
   }, [appearance.mode]);
 
   const value = useMemo<ThemeState>(
-    () => ({ themes: BUILTIN_THEMES, theme, kind, settings }),
-    [theme, kind, settings],
+    () => ({ themes, theme, kind, settings }),
+    [themes, theme, kind, settings],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

@@ -46,13 +46,6 @@
   color: var(--text-faint);
 }
 
-.appearance-note {
-  margin: 0;
-  padding-top: 14px;
-  border-top: 1px solid var(--border);
-  font-size: 12px;
-  color: var(--text-faint);
-}
 
 /* ---------- Theme cards ---------- */
 
@@ -96,12 +89,17 @@
 }
 
 .theme-card-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 12.5px;
   font-weight: 500;
   color: var(--text);
 }
 
 .theme-card-tag {
+  flex-shrink: 0;
   margin-left: auto;
   padding: 0 7px;
   border-radius: 999px;
@@ -281,4 +279,165 @@
 
 .appearance-row.is-disabled input[type="range"] {
   cursor: default;
+}
+
+.theme-card-tag.is-imported {
+  color: var(--text-muted);
+  background: var(--surface-hover);
+}
+
+/* Grid cell: the card plus, for imported themes, a remove button over its preview. */
+.theme-card-slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.theme-card-slot > .theme-card {
+  flex: 1;
+}
+
+.theme-card-remove {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 2px 8px -2px var(--shadow);
+  opacity: 0;
+  transition: opacity 120ms;
+}
+
+.theme-card-slot:hover .theme-card-remove,
+.theme-card-remove:focus-visible {
+  opacity: 1;
+}
+
+.theme-card-remove:hover {
+  color: var(--tone-red);
+}
+
+.theme-card-remove:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+/* ---------- Open VSX import ---------- */
+
+.theme-import {
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.theme-import-button {
+  flex-shrink: 0;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.theme-import-button:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.theme-import-search {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  outline: none;
+  transition: border-color 120ms;
+}
+
+.theme-import-search:focus {
+  border-color: var(--accent);
+}
+
+.theme-import-caption {
+  min-height: 16px;
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.theme-import-notice {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.theme-import-notice.is-error {
+  color: var(--tone-red);
+}
+
+.theme-import-results {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.theme-import-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 12px;
+}
+
+.theme-import-row + .theme-import-row {
+  border-top: 1px solid var(--border);
+}
+
+.theme-import-info {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.theme-import-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.theme-import-verified {
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--tone-green);
+  background: color-mix(in srgb, var(--tone-green) 14%, transparent);
+}
+
+.theme-import-meta {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.theme-import-description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-muted);
 }
