@@ -6,6 +6,7 @@ mod image_proxy;
 mod pull_requests;
 mod queries;
 mod rich_text;
+mod search;
 mod settings;
 mod themes;
 mod work_items;
@@ -27,6 +28,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(AppState::default())
+        .manage(search::SearchState::default())
         .setup(|app| {
             let path = app.path().app_config_dir()?.join(settings::FILE_NAME);
             app.manage(settings::SettingsState::load(path));
@@ -66,6 +68,7 @@ pub fn run() {
             queries::list_iterations,
             queries::list_work_item_types,
             queries::list_team_members,
+            search::quick_search,
             themes::search_theme_extensions,
             themes::import_theme_extension,
             themes::list_imported_themes,

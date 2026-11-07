@@ -197,22 +197,26 @@ impl AzdoClient {
 
     /// Runs a WIQL query (organization scope) and fetches up to [`MAX_WORK_ITEMS`] results.
     pub(crate) async fn work_items_by_wiql(&self, wiql: &str) -> AppResult<Vec<WorkItem>> {
-        let mut wiql_url = self.url(&["_apis", "wit", "wiql"]);
-        wiql_url
-            .query_pairs_mut()
-            .append_pair("$top", &MAX_WORK_ITEMS.to_string());
-        let wiql: WiqlResponse = self.post_json(wiql_url, &json!({ "query": wiql })).await?;
+        self.work_items_by_wiql_top(wiql, MAX_WORK_ITEMS).await
+    }
 
-        let ids: Vec<String> = wiql
-            .work_items
-            .iter()
-            .take(MAX_WORK_ITEMS)
-            .map(|r| r.id.to_string())
-            .collect();
+    /// Like [`Self::work_items_by_wiql`] with a smaller cap (at most [`MAX_WORK_ITEMS`]).
+    pub(crate) async fn work_items_by_wiql_top(&self, wiql: &str, top: usize) -> AppResult<Vec<WorkItem>> {
+        let top = top.min(MAX_WORK_ITEMS);
+        let mut wiql_url = self.url(&["_apis", "wit", "wiql"]);
+        wiql_url.query_pairs_mut().append_pair("$top", &top.to_string());
+        let wiql: WiqlResponse = self.post_json(wiql_url, &json!({ "query": wiql })).await?;
+        let ids: Vec<i64> = wiql.work_items.iter().take(top).map(|r| r.id).collect();
+        self.work_items_by_ids(&ids).await
+    }
+
+    /// Work items by ID, in the order given; IDs that do not exist (or are not visible) are
+    /// skipped.
+    pub(crate) async fn work_items_by_ids(&self, ids: &[i64]) -> AppResult<Vec<WorkItem>> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
-
+        let ids: Vec<String> = ids.iter().take(MAX_WORK_ITEMS).map(i64::to_string).collect();
         let mut items_url = self.url(&["_apis", "wit", "workitems"]);
         items_url
             .query_pairs_mut()
@@ -227,6 +231,17 @@ impl AzdoClient {
             .flatten()
             .map(|raw| model::map_work_item(self.org(), raw))
             .collect())
+    }
+
+    /// One pull request by ID, in any project of the organization; `None` if it does not
+    /// exist or is not visible.
+    pub(crate) async fn pull_request_by_id(&self, id: i64) -> AppResult<Option<PullRequest>> {
+        let url = self.url(&["_apis", "git", "pullrequests", &id.to_string()]);
+        match self.get_json::<RawPullRequest>(url).await {
+            Ok(raw) => Ok(Some(model::map_pull_request(self.org(), &self.session.user_id, raw))),
+            Err(AppError::NotFound) => Ok(None),
+            Err(err) => Err(err),
+        }
     }
 
     /// Pull requests of one project matching the given `searchCriteria.*` / `$top` pairs.

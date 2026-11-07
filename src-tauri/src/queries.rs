@@ -41,6 +41,9 @@ const TEAM_MEMBERS_PAGE: &str = "500";
 pub enum QueryError {
     #[error("Invalid filter: {0}")]
     InvalidFilter(String),
+    /// Quick search input (fixed text: the query is never echoed).
+    #[error("{0}")]
+    InvalidSearch(&'static str),
     #[error(transparent)]
     App(#[from] AppError),
 }
@@ -50,9 +53,13 @@ impl Serialize for QueryError {
         use serde::ser::SerializeStruct;
         match self {
             QueryError::App(err) => err.serialize(serializer),
-            QueryError::InvalidFilter(_) => {
+            QueryError::InvalidFilter(_) | QueryError::InvalidSearch(_) => {
+                let kind = match self {
+                    QueryError::InvalidSearch(_) => "invalidSearch",
+                    _ => "invalidFilter",
+                };
                 let mut state = serializer.serialize_struct("QueryError", 2)?;
-                state.serialize_field("kind", "invalidFilter")?;
+                state.serialize_field("kind", kind)?;
                 state.serialize_field("message", &self.to_string())?;
                 state.end()
             }
@@ -534,13 +541,21 @@ pub async fn query_pull_requests(
     filter: PullRequestFilter,
 ) -> QueryResult<Vec<PullRequest>> {
     let client = current_client(&state)?;
-    let searches = pull_request_searches(&filter, &client.session().user_id)?;
+    fetch_pull_requests(&client, &filter).await
+}
+
+/// Pull requests matching `filter` across its project (or every project), merged so each
+/// appears once. Shared by the PR list and the quick search.
+pub(crate) async fn fetch_pull_requests(
+    client: &AzdoClient,
+    filter: &PullRequestFilter,
+) -> QueryResult<Vec<PullRequest>> {
+    let searches = pull_request_searches(filter, &client.session().user_id)?;
     let projects = match &filter.project {
         Some(project) => vec![validate_project(project)?],
         None => client.projects().await?,
     };
 
-    let client = &client;
     let searches = &searches;
     let prs = across_projects(&projects, |project| {
         async move {
