@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { openUrl } from "@tauri-apps/plugin-opener";
-import { api, type ApiError, type PullRequest, type Session } from "../../lib/api";
+import { api, type ApiError, type PullRequest, type Session, type WorkItem } from "../../lib/api";
 import { useResource } from "../../lib/useResource";
 import { ErrorBanner, Spinner } from "../../components/ui";
 import { Sidebar, type View } from "./Sidebar";
 import { WorkItemList } from "./WorkItemList";
 import { PullRequestList } from "./PullRequestList";
+import { WorkItemDetailView } from "../workitem/WorkItemDetailView";
+import { PullRequestDetailView } from "../pullrequest/PullRequestDetailView";
 
 interface Props {
   session: Session;
@@ -14,6 +15,11 @@ interface Props {
 }
 
 type PrFilter = "all" | "reviewer" | "author";
+
+type Selection =
+  | { kind: "workItem"; workItem: WorkItem }
+  | { kind: "pullRequest"; pullRequest: PullRequest }
+  | null;
 
 const TITLES: Record<View, string> = {
   workItems: "My work items",
@@ -29,6 +35,7 @@ export function Workspace({ session, onSignOut, onUnauthorized }: Props) {
   const [view, setView] = useState<View>("workItems");
   const [query, setQuery] = useState("");
   const [prFilter, setPrFilter] = useState<PrFilter>("all");
+  const [selection, setSelection] = useState<Selection>(null);
 
   const workItems = useResource(api.listWorkItems);
   const pullRequests = useResource(api.listPullRequests);
@@ -39,17 +46,21 @@ export function Workspace({ session, onSignOut, onUnauthorized }: Props) {
     if (failed.some((e) => e?.kind === "unauthorized" || e?.kind === "notSignedIn")) onUnauthorized();
   }, [workItems.error, pullRequests.error, onUnauthorized]);
 
-  // Cmd/Ctrl+R refreshes the current view instead of reloading the webview.
+  // Esc closes a detail view; Cmd/Ctrl+R refreshes the list instead of reloading the webview.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "r") {
+      if (e.key === "Escape" && selection) {
+        setSelection(null);
+        return;
+      }
+      if (!selection && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "r") {
         e.preventDefault();
         active.reload();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [active]);
+  }, [active, selection]);
 
   const visibleWorkItems = useMemo(
     () =>
@@ -69,7 +80,6 @@ export function Workspace({ session, onSignOut, onUnauthorized }: Props) {
     [pullRequests.data, query, prFilter],
   );
 
-  const open = (url: string) => void openUrl(url);
 
   return (
     <div className="shell">
@@ -80,11 +90,24 @@ export function Workspace({ session, onSignOut, onUnauthorized }: Props) {
           workItems: workItems.data?.length ?? null,
           pullRequests: pullRequests.data?.length ?? null,
         }}
-        onSelect={setView}
+        onSelect={(next) => {
+          setSelection(null);
+          setView(next);
+        }}
         onSignOut={onSignOut}
       />
 
       <main className="content">
+        {selection?.kind === "workItem" ? (
+          <WorkItemDetailView key={selection.workItem.id} workItem={selection.workItem} onBack={() => setSelection(null)} />
+        ) : selection?.kind === "pullRequest" ? (
+          <PullRequestDetailView
+            key={selection.pullRequest.id}
+            pullRequest={selection.pullRequest}
+            onBack={() => setSelection(null)}
+          />
+        ) : (
+          <>
         <header className="toolbar" data-tauri-drag-region>
           <h2>{TITLES[view]}</h2>
           {view === "pullRequests" && (
@@ -120,11 +143,16 @@ export function Workspace({ session, onSignOut, onUnauthorized }: Props) {
               <Spinner />
             </div>
           ) : view === "workItems" ? (
-            <WorkItemList items={visibleWorkItems} onOpen={open} />
+            <WorkItemList items={visibleWorkItems} onSelect={(workItem) => setSelection({ kind: "workItem", workItem })} />
           ) : (
-            <PullRequestList pullRequests={visiblePullRequests} onOpen={open} />
+            <PullRequestList
+              pullRequests={visiblePullRequests}
+              onSelect={(pullRequest) => setSelection({ kind: "pullRequest", pullRequest })}
+            />
           )}
         </section>
+          </>
+        )}
       </main>
     </div>
   );

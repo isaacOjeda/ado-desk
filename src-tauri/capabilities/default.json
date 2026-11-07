@@ -12,10 +12,7 @@
       "identifier": "opener:allow-open-url",
       "allow": [
         {
-          "url": "https://dev.azure.com/*"
-        },
-        {
-          "url": "https://learn.microsoft.com/*"
+          "url": "https://*"
         }
       ]
     }

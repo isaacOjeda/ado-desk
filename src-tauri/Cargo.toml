@@ -27,6 +27,9 @@ futures = "0.3.34"
 thiserror = "2.0.21"
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 url = "2.5.8"
+ammonia = "4.2.4"
+pulldown-cmark = "0.13.6"
+similar = "3.2.1"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

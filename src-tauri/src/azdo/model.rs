@@ -48,6 +48,7 @@ pub struct PullRequest {
     pub title: String,
     pub project: String,
     pub repository: String,
+    pub repository_id: String,
     pub source_branch: String,
     pub target_branch: String,
     pub author: String,
@@ -129,6 +130,7 @@ pub struct RawPullRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct RawRepository {
+    pub id: String,
     pub name: String,
     pub project: RawProject,
 }
@@ -246,6 +248,7 @@ pub fn map_pull_request(organization: &str, user_id: &str, raw: RawPullRequest) 
     let approvals = raw.reviewers.iter().filter(|r| r.vote >= 5).count();
     let project = raw.repository.project.name;
     let repository = raw.repository.name;
+    let repository_id = raw.repository.id;
     let url = build_url(&[
         organization,
         &project,
@@ -277,6 +280,7 @@ pub fn map_pull_request(organization: &str, user_id: &str, raw: RawPullRequest) 
         reviewer_count: raw.reviewers.len(),
         project,
         repository,
+        repository_id,
         url: url.to_string(),
     }
 }
@@ -374,7 +378,7 @@ mod tests {
             "isDraft": false,
             "creationDate": created,
             "createdBy": { "id": author_id, "displayName": "Someone" },
-            "repository": { "name": "api", "project": { "name": "Core" } },
+            "repository": { "id": "repo-guid", "name": "api", "project": { "name": "Core" } },
             "sourceRefName": "refs/heads/feature/x",
             "targetRefName": "refs/heads/main",
             "reviewers": reviewers
@@ -400,6 +404,7 @@ mod tests {
         assert_eq!(pr.source_branch, "feature/x");
         assert_eq!(pr.target_branch, "main");
         assert_eq!(pr.url, "https://dev.azure.com/contoso/Core/_git/api/pullrequest/7");
+        assert_eq!(pr.repository_id, "repo-guid");
     }
 
     #[test]

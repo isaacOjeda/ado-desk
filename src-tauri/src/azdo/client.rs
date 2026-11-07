@@ -56,20 +56,66 @@ impl AzdoClient {
         &self.session
     }
 
-    fn org(&self) -> &str {
+    pub(crate) fn org(&self) -> &str {
         &self.session.organization
     }
 
-    fn url(&self, segments: &[&str]) -> Url {
+    /// `https://dev.azure.com/{org}/{segments...}?api-version=7.1`, segments percent-encoded.
+    pub(crate) fn url(&self, segments: &[&str]) -> Url {
+        self.url_with_version(segments, API_VERSION)
+    }
+
+    /// Same as [`Self::url`] for endpoints that only exist as preview versions.
+    pub(crate) fn url_with_version(&self, segments: &[&str], api_version: &str) -> Url {
         let mut full = vec![self.org()];
         full.extend_from_slice(segments);
         let mut url = model::build_url(&full);
-        url.query_pairs_mut().append_pair("api-version", API_VERSION);
+        url.query_pairs_mut().append_pair("api-version", api_version);
         url
     }
 
     fn get(&self, url: Url) -> RequestBuilder {
         self.http.get(url).basic_auth("", Some(&self.pat))
+    }
+
+    /// Authenticated GET that decodes a JSON body. Shared by every feature module.
+    pub(crate) async fn get_json<T: DeserializeOwned>(&self, url: Url) -> AppResult<T> {
+        send::<T>(self.get(url)).await.map(|(value, _)| value)
+    }
+
+    /// Authenticated GET returning the raw body and its content type (attachments, file blobs).
+    /// Only URLs on `dev.azure.com` for the signed-in organization are accepted.
+    pub(crate) async fn get_bytes(&self, url: Url) -> AppResult<(Vec<u8>, String)> {
+        let same_org = url.host_str() == Some("dev.azure.com")
+            && url
+                .path_segments()
+                .and_then(|mut s| s.next())
+                .is_some_and(|org| org.eq_ignore_ascii_case(self.org()));
+        if url.scheme() != "https" || !same_org {
+            return Err(AppError::NotFound);
+        }
+
+        let response = self.get(url).send().await?;
+        let status = response.status();
+        if status == StatusCode::UNAUTHORIZED
+            || status == StatusCode::NON_AUTHORITATIVE_INFORMATION
+            || status.is_redirection()
+        {
+            return Err(AppError::Unauthorized);
+        }
+        if !status.is_success() {
+            return Err(AppError::Api {
+                status: status.as_u16(),
+                message: "download failed".into(),
+            });
+        }
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("application/octet-stream")
+            .to_string();
+        Ok((response.bytes().await?.to_vec(), content_type))
     }
 
     pub async fn my_work_items(&self) -> AppResult<Vec<WorkItem>> {

@@ -24,6 +24,7 @@ export interface PullRequest {
   title: string;
   project: string;
   repository: string;
+  repositoryId: string;
   sourceBranch: string;
   targetBranch: string;
   author: string;
@@ -56,7 +57,8 @@ export class ApiError extends Error {
   }
 }
 
-async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+/** Invokes a Tauri command and normalizes its error into `ApiError`. */
+export async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   try {
     return await invoke<T>(command, args);
   } catch (raw) {

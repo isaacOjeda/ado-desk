@@ -15,7 +15,7 @@ fn set_client(state: &AppState, client: Option<Arc<AzdoClient>>) {
     *state.client.write().unwrap_or_else(|e| e.into_inner()) = client;
 }
 
-fn current_client(state: &AppState) -> AppResult<Arc<AzdoClient>> {
+pub(crate) fn current_client(state: &AppState) -> AppResult<Arc<AzdoClient>> {
     state
         .client
         .read()

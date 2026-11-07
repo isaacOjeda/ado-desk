@@ -4,10 +4,10 @@ import { Badge, Dot, EmptyState } from "../../components/ui";
 
 interface Props {
   items: WorkItem[];
-  onOpen: (url: string) => void;
+  onSelect: (item: WorkItem) => void;
 }
 
-export function WorkItemList({ items, onOpen }: Props) {
+export function WorkItemList({ items, onSelect }: Props) {
   if (items.length === 0) {
     return <EmptyState title="Nothing assigned to you" hint="Open work items assigned to you show up here." />;
   }
@@ -16,7 +16,7 @@ export function WorkItemList({ items, onOpen }: Props) {
     <ul className="list">
       {items.map((item) => (
         <li key={item.id}>
-          <button className="row" onClick={() => onOpen(item.url)}>
+          <button className="row" onClick={() => onSelect(item)}>
             <Dot tone={workItemTypeTone(item.workItemType)} />
             <span className="row-id">{item.id}</span>
             <span className="row-main">

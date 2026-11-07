@@ -4,10 +4,10 @@ import { Badge, EmptyState } from "../../components/ui";
 
 interface Props {
   pullRequests: PullRequest[];
-  onOpen: (url: string) => void;
+  onSelect: (pullRequest: PullRequest) => void;
 }
 
-export function PullRequestList({ pullRequests, onOpen }: Props) {
+export function PullRequestList({ pullRequests, onSelect }: Props) {
   if (pullRequests.length === 0) {
     return <EmptyState title="No active pull requests" hint="PRs you created or review show up here." />;
   }
@@ -18,7 +18,7 @@ export function PullRequestList({ pullRequests, onOpen }: Props) {
         const vote = voteLabel(pr.role === "reviewer" ? pr.myVote : null);
         return (
           <li key={pr.id}>
-            <button className="row" onClick={() => onOpen(pr.url)}>
+            <button className="row" onClick={() => onSelect(pr)}>
               <span className={`pr-icon ${pr.isDraft ? "is-draft" : ""}`} aria-hidden>
                 ⇄
               </span>
