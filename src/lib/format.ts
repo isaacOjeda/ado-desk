@@ -55,6 +55,18 @@ export function stateTone(state: string): Tone {
   return "blue";
 }
 
+/** Badge for closed pull requests; active ones get none. */
+export function pullRequestStatusBadge(status: string | undefined): { label: string; tone: Tone } | null {
+  switch (status) {
+    case "completed":
+      return { label: "Completed", tone: "green" };
+    case "abandoned":
+      return { label: "Abandoned", tone: "neutral" };
+    default:
+      return null;
+  }
+}
+
 export function voteLabel(vote: number | null): { label: string; tone: Tone } {
   switch (vote) {
     case 10:

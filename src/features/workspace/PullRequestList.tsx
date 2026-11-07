@@ -1,21 +1,29 @@
-import type { PullRequest } from "../../lib/api";
-import { timeAgo, voteLabel } from "../../lib/format";
+import type { FilteredPullRequest } from "../filters/api";
+import { pullRequestStatusBadge, timeAgo, voteLabel } from "../../lib/format";
 import { Badge, EmptyState } from "../../components/ui";
 
 interface Props {
-  pullRequests: PullRequest[];
-  onSelect: (pullRequest: PullRequest) => void;
+  pullRequests: FilteredPullRequest[];
+  onSelect: (pullRequest: FilteredPullRequest) => void;
+  /** True when filters other than the defaults are applied. */
+  isFiltered?: boolean;
 }
 
-export function PullRequestList({ pullRequests, onSelect }: Props) {
+export function PullRequestList({ pullRequests, onSelect, isFiltered = false }: Props) {
   if (pullRequests.length === 0) {
-    return <EmptyState title="No active pull requests" hint="PRs you created or review show up here." />;
+    return isFiltered ? (
+      <EmptyState title="No pull requests match these filters" hint="Change or reset the filters above." />
+    ) : (
+      <EmptyState title="No active pull requests" hint="PRs you created or review show up here." />
+    );
   }
 
   return (
     <ul className="list">
       {pullRequests.map((pr) => {
-        const vote = voteLabel(pr.role === "reviewer" ? pr.myVote : null);
+        const closed = pullRequestStatusBadge(pr.status);
+        const vote = closed ? { label: "", tone: "neutral" as const } : voteLabel(pr.role === "reviewer" ? pr.myVote : null);
+        const time = closed ? (pr.closedAt ?? pr.createdAt) : pr.createdAt;
         return (
           <li key={pr.id}>
             <button className="row" onClick={() => onSelect(pr)}>
@@ -25,18 +33,21 @@ export function PullRequestList({ pullRequests, onSelect }: Props) {
               <span className="row-id">!{pr.id}</span>
               <span className="row-main">
                 <span className="row-title">
-                  {pr.isDraft && <Badge>Draft</Badge>} {pr.title}
+                  {pr.isDraft && !closed && <Badge>Draft</Badge>} {pr.title}
                 </span>
                 <span className="row-meta">
                   {pr.repository} · <code>{pr.sourceBranch}</code> → <code>{pr.targetBranch}</code> ·{" "}
                   {pr.author}
                 </span>
               </span>
+              {closed && <Badge tone={closed.tone}>{closed.label}</Badge>}
               {vote.label && <Badge tone={vote.tone}>{vote.label}</Badge>}
               <span className="approvals" title="Approvals">
                 ✓ {pr.approvals}/{pr.reviewerCount}
               </span>
-              <span className="row-time">{timeAgo(pr.createdAt)}</span>
+              <span className="row-time" title={closed ? `${closed.label} ${timeAgo(time)}` : undefined}>
+                {timeAgo(time)}
+              </span>
             </button>
           </li>
         );

@@ -5,11 +5,17 @@ import { Badge, Dot, EmptyState } from "../../components/ui";
 interface Props {
   items: WorkItem[];
   onSelect: (item: WorkItem) => void;
+  /** True when filters other than the defaults are applied. */
+  isFiltered?: boolean;
 }
 
-export function WorkItemList({ items, onSelect }: Props) {
+export function WorkItemList({ items, onSelect, isFiltered = false }: Props) {
   if (items.length === 0) {
-    return <EmptyState title="Nothing assigned to you" hint="Open work items assigned to you show up here." />;
+    return isFiltered ? (
+      <EmptyState title="No work items match these filters" hint="Change or reset the filters above." />
+    ) : (
+      <EmptyState title="Nothing assigned to you" hint="Open work items assigned to you show up here." />
+    );
   }
 
   return (

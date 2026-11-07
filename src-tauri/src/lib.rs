@@ -4,6 +4,7 @@ mod credentials;
 mod error;
 mod image_proxy;
 mod pull_requests;
+mod queries;
 mod rich_text;
 mod settings;
 mod work_items;
@@ -56,6 +57,12 @@ pub fn run() {
             pull_requests::list_pull_request_threads,
             pull_requests::list_pull_request_files,
             pull_requests::get_pull_request_file_diff,
+            queries::query_work_items,
+            queries::query_pull_requests,
+            queries::list_projects,
+            queries::list_iterations,
+            queries::list_work_item_types,
+            queries::list_team_members,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

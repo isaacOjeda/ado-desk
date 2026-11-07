@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { api, type ApiError, type PullRequest, type Session, type WorkItem } from "../../lib/api";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ApiError, Session, WorkItem } from "../../lib/api";
 import { settingsApi } from "../../lib/settings";
 import { useResource } from "../../lib/useResource";
 import { ErrorBanner, Spinner } from "../../components/ui";
@@ -8,6 +8,16 @@ import { WorkItemList } from "./WorkItemList";
 import { PullRequestList } from "./PullRequestList";
 import { WorkItemDetailView } from "../workitem/WorkItemDetailView";
 import { PullRequestDetailView } from "../pullrequest/PullRequestDetailView";
+import { filtersApi, type FilteredPullRequest } from "../filters/api";
+import {
+  countPullRequestFilters,
+  countWorkItemFilters,
+  parsePullRequestFilter,
+  parseWorkItemFilter,
+} from "../filters/model";
+import { usePersistentFilter } from "../filters/usePersistentFilter";
+import { WorkItemFilterBar } from "../filters/WorkItemFilterBar";
+import { PullRequestFilterBar } from "../filters/PullRequestFilterBar";
 
 interface Props {
   session: Session;
@@ -15,11 +25,9 @@ interface Props {
   onUnauthorized: () => void;
 }
 
-type PrFilter = "all" | "reviewer" | "author";
-
 type Selection =
   | { kind: "workItem"; workItem: WorkItem }
-  | { kind: "pullRequest"; pullRequest: PullRequest }
+  | { kind: "pullRequest"; pullRequest: FilteredPullRequest }
   | null;
 
 const TITLES: Record<View, string> = {
@@ -39,11 +47,23 @@ function matches(query: string, ...values: (string | number)[]) {
 export function Workspace({ session, onSignOut, onUnauthorized }: Props) {
   const [view, setView] = useState<View>("workItems");
   const [query, setQuery] = useState("");
-  const [prFilter, setPrFilter] = useState<PrFilter>("all");
   const [selection, setSelection] = useState<Selection>(null);
+  const organization = session.organization;
+  const [workItemFilter, setWorkItemFilter] = usePersistentFilter(organization, "workItems", parseWorkItemFilter);
+  const [pullRequestFilter, setPullRequestFilter] = usePersistentFilter(
+    organization,
+    "pullRequests",
+    parsePullRequestFilter,
+  );
 
-  const workItems = useResource(api.listWorkItems);
-  const pullRequests = useResource(api.listPullRequests);
+  // `organization` is a dependency so switching organizations refetches even with equal filters.
+  const workItems = useResource(
+    useCallback(() => filtersApi.queryWorkItems(workItemFilter), [organization, workItemFilter]),
+  );
+  const pullRequests = useResource(
+    useCallback(() => filtersApi.queryPullRequests(pullRequestFilter), [organization, pullRequestFilter]),
+  );
+  const projects = useResource(useCallback(() => filtersApi.listProjects(), [organization]));
   const active = view === "workItems" ? workItems : pullRequests;
 
   useEffect(() => {
@@ -83,12 +103,10 @@ export function Workspace({ session, onSignOut, onUnauthorized }: Props) {
 
   const visiblePullRequests = useMemo(
     () =>
-      (pullRequests.data ?? []).filter(
-        (pr: PullRequest) =>
-          (prFilter === "all" || pr.role === prFilter) &&
-          matches(query, pr.id, pr.title, pr.repository, pr.author, pr.sourceBranch),
+      (pullRequests.data ?? []).filter((pr) =>
+        matches(query, pr.id, pr.title, pr.repository, pr.author, pr.sourceBranch),
       ),
-    [pullRequests.data, query, prFilter],
+    [pullRequests.data, query],
   );
 
 
@@ -122,21 +140,6 @@ export function Workspace({ session, onSignOut, onUnauthorized }: Props) {
           <>
         <header className="toolbar" data-tauri-drag-region>
           <h2>{TITLES[view]}</h2>
-          {view === "pullRequests" && (
-            <div className="segmented" role="tablist">
-              {(["all", "reviewer", "author"] as PrFilter[]).map((f) => (
-                <button
-                  key={f}
-                  role="tab"
-                  aria-selected={prFilter === f}
-                  className={prFilter === f ? "is-active" : ""}
-                  onClick={() => setPrFilter(f)}
-                >
-                  {f === "all" ? "All" : f === "reviewer" ? "Reviewing" : "Created"}
-                </button>
-              ))}
-            </div>
-          )}
           <input
             className="search"
             placeholder="Filter…"
@@ -148,6 +151,21 @@ export function Workspace({ session, onSignOut, onUnauthorized }: Props) {
           </button>
         </header>
 
+        {view === "workItems" ? (
+          <WorkItemFilterBar
+            key={organization}
+            filter={workItemFilter}
+            onChange={setWorkItemFilter}
+            projects={projects.data}
+          />
+        ) : (
+          <PullRequestFilterBar
+            filter={pullRequestFilter}
+            onChange={setPullRequestFilter}
+            projects={projects.data}
+          />
+        )}
+
         <section className="panel">
           {active.error && <ErrorBanner message={active.error.message} onRetry={active.reload} />}
           {active.loading && !active.data ? (
@@ -155,10 +173,15 @@ export function Workspace({ session, onSignOut, onUnauthorized }: Props) {
               <Spinner />
             </div>
           ) : view === "workItems" ? (
-            <WorkItemList items={visibleWorkItems} onSelect={(workItem) => setSelection({ kind: "workItem", workItem })} />
+            <WorkItemList
+              items={visibleWorkItems}
+              isFiltered={countWorkItemFilters(workItemFilter) > 0 || query.trim() !== ""}
+              onSelect={(workItem) => setSelection({ kind: "workItem", workItem })}
+            />
           ) : (
             <PullRequestList
               pullRequests={visiblePullRequests}
+              isFiltered={countPullRequestFilters(pullRequestFilter) > 0 || query.trim() !== ""}
               onSelect={(pullRequest) => setSelection({ kind: "pullRequest", pullRequest })}
             />
           )}

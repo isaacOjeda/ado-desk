@@ -43,6 +43,15 @@ pub enum PullRequestRole {
     Reviewer,
 }
 
+/// Lifecycle state of a pull request in list views. Drafts are `Active` with `is_draft`.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum PullRequestState {
+    Active,
+    Completed,
+    Abandoned,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PullRequest {
@@ -63,6 +72,9 @@ pub struct PullRequest {
     pub approvals: usize,
     pub reviewer_count: usize,
     pub url: String,
+    pub status: PullRequestState,
+    /// When the pull request was completed or abandoned.
+    pub closed_at: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -131,6 +143,10 @@ pub struct RawPullRequest {
     pub target_ref_name: String,
     #[serde(default)]
     pub reviewers: Vec<RawReviewer>,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub closed_date: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -252,6 +268,15 @@ fn short_branch(reference: &str) -> String {
         .to_string()
 }
 
+/// Unknown or missing statuses (`notSet`) are treated as active.
+pub fn map_pull_request_state(status: Option<&str>) -> PullRequestState {
+    match status.map(str::to_ascii_lowercase).as_deref() {
+        Some("completed") => PullRequestState::Completed,
+        Some("abandoned") => PullRequestState::Abandoned,
+        _ => PullRequestState::Active,
+    }
+}
+
 pub fn map_pull_request(organization: &str, user_id: &str, raw: RawPullRequest) -> PullRequest {
     let is_author = raw.created_by.id.eq_ignore_ascii_case(user_id);
     let my_vote = raw
@@ -273,6 +298,8 @@ pub fn map_pull_request(organization: &str, user_id: &str, raw: RawPullRequest) 
     ]);
 
     PullRequest {
+        status: map_pull_request_state(raw.status.as_deref()),
+        closed_at: raw.closed_date,
         id: raw.pull_request_id,
         title: raw.title,
         source_branch: short_branch(&raw.source_ref_name),
@@ -463,5 +490,43 @@ mod tests {
 
         assert_eq!(merged.iter().map(|p| p.id).collect::<Vec<_>>(), vec![2, 1]);
         assert_eq!(merged[1].role, PullRequestRole::Author);
+    }
+
+    #[test]
+    fn merge_keeps_status_and_closed_date_of_the_kept_entry() {
+        let mut raw = raw_pr(3, ME, json!([{ "id": ME, "vote": 10 }]), "2026-09-01T00:00:00Z");
+        raw.status = Some("completed".into());
+        raw.closed_date = Some("2026-09-05T00:00:00Z".into());
+        let as_author = map_pull_request("contoso", ME, raw);
+        let mut as_reviewer = as_author.clone();
+        as_reviewer.role = PullRequestRole::Reviewer;
+
+        let merged = merge_pull_requests(vec![as_reviewer, as_author]);
+
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].role, PullRequestRole::Author);
+        assert_eq!(merged[0].status, PullRequestState::Completed);
+        assert_eq!(merged[0].closed_at.as_deref(), Some("2026-09-05T00:00:00Z"));
+    }
+
+    #[test]
+    fn maps_pull_request_status_and_closed_date() {
+        let cases = [
+            (None, PullRequestState::Active),
+            (Some("active"), PullRequestState::Active),
+            (Some("notSet"), PullRequestState::Active),
+            (Some("completed"), PullRequestState::Completed),
+            (Some("Abandoned"), PullRequestState::Abandoned),
+        ];
+        for (status, expected) in cases {
+            let mut raw = raw_pr(9, ME, json!([]), "2026-11-02T00:00:00Z");
+            raw.status = status.map(str::to_string);
+            raw.closed_date = status.map(|_| "2026-11-03T00:00:00Z".to_string());
+
+            let pr = map_pull_request("contoso", ME, raw);
+
+            assert_eq!(pr.status, expected, "status: {status:?}");
+            assert_eq!(pr.closed_at.as_deref(), status.map(|_| "2026-11-03T00:00:00Z"));
+        }
     }
 }

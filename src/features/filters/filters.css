@@ -1,0 +1,149 @@
+/* Filter bar under the list toolbars. Colors come only from theme tokens. */
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  flex-shrink: 0;
+}
+
+[data-translucency="on"] .filter-bar {
+  background: var(--glass-chrome);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+.filter-bar-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.filter-count {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.filter-field {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 4px 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 12px;
+  transition: border-color 120ms, background 120ms;
+}
+
+.filter-field:hover:not(.is-disabled) {
+  background: var(--surface-hover);
+}
+
+.filter-field:focus-within {
+  border-color: var(--accent);
+}
+
+.filter-field.is-set {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+
+.filter-field.is-disabled {
+  opacity: 0.55;
+}
+
+.filter-field label,
+.filter-label {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.filter-field select,
+.filter-trigger {
+  max-width: 180px;
+  height: 22px;
+  padding: 0 2px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  color: var(--text);
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.filter-field select:disabled {
+  cursor: default;
+}
+
+.filter-field select option {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.filter-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.filter-caret {
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.filter-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  min-width: 200px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  box-shadow: 0 12px 32px -8px var(--shadow);
+}
+
+.filter-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.filter-option:hover {
+  background: var(--surface-hover);
+}
+
+.filter-option input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.filter-empty {
+  margin: 0;
+  padding: 6px 8px;
+  color: var(--text-muted);
+}
+
+.filter-clear {
+  width: 100%;
+  margin-top: 4px;
+  justify-content: flex-start;
+}

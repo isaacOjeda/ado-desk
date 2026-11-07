@@ -31,6 +31,12 @@ pub struct AzdoClient {
 }
 
 impl AzdoClient {
+    /// The historic "my open work items" WIQL; filtered queries must reproduce it by default.
+    #[cfg(test)]
+    pub(crate) const MY_OPEN_WORK_ITEMS: &'static str = MY_OPEN_WORK_ITEMS;
+    /// Concurrent per-project requests when a query fans out over every project.
+    pub(crate) const PROJECT_CONCURRENCY: usize = PROJECT_CONCURRENCY;
+
     /// Validates the token against `connectionData` and resolves the signed-in identity.
     pub async fn connect(organization: &str, pat: &str) -> AppResult<Self> {
         let http = reqwest::Client::builder()
@@ -81,6 +87,12 @@ impl AzdoClient {
     /// Authenticated GET that decodes a JSON body. Shared by every feature module.
     pub(crate) async fn get_json<T: DeserializeOwned>(&self, url: Url) -> AppResult<T> {
         send::<T>(self.get(url)).await.map(|(value, _)| value)
+    }
+
+    /// Authenticated POST with a JSON body that decodes a JSON response.
+    pub(crate) async fn post_json<T: DeserializeOwned>(&self, url: Url, body: &Value) -> AppResult<T> {
+        let request = self.http.post(url).basic_auth("", Some(&self.pat)).json(body);
+        send::<T>(request).await.map(|(value, _)| value)
     }
 
     /// Authenticated GET returning the raw body and its content type (attachments, file blobs).
@@ -158,7 +170,7 @@ impl AzdoClient {
             .collect())
     }
 
-    async fn projects(&self) -> AppResult<Vec<String>> {
+    pub(crate) async fn projects(&self) -> AppResult<Vec<String>> {
         let mut names = Vec::new();
         let mut continuation: Option<String> = None;
 
@@ -181,6 +193,56 @@ impl AzdoClient {
                 return Ok(names);
             }
         }
+    }
+
+    /// Runs a WIQL query (organization scope) and fetches up to [`MAX_WORK_ITEMS`] results.
+    pub(crate) async fn work_items_by_wiql(&self, wiql: &str) -> AppResult<Vec<WorkItem>> {
+        let mut wiql_url = self.url(&["_apis", "wit", "wiql"]);
+        wiql_url
+            .query_pairs_mut()
+            .append_pair("$top", &MAX_WORK_ITEMS.to_string());
+        let wiql: WiqlResponse = self.post_json(wiql_url, &json!({ "query": wiql })).await?;
+
+        let ids: Vec<String> = wiql
+            .work_items
+            .iter()
+            .take(MAX_WORK_ITEMS)
+            .map(|r| r.id.to_string())
+            .collect();
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut items_url = self.url(&["_apis", "wit", "workitems"]);
+        items_url
+            .query_pairs_mut()
+            .append_pair("ids", &ids.join(","))
+            .append_pair("fields", WORK_ITEM_FIELDS)
+            .append_pair("errorPolicy", "Omit");
+        let items: ListResponse<Option<RawWorkItem>> = self.get_json(items_url).await?;
+
+        Ok(items
+            .value
+            .into_iter()
+            .flatten()
+            .map(|raw| model::map_work_item(self.org(), raw))
+            .collect())
+    }
+
+    /// Pull requests of one project matching the given `searchCriteria.*` / `$top` pairs.
+    pub(crate) async fn search_pull_requests(
+        &self,
+        project: &str,
+        params: &[(String, String)],
+    ) -> AppResult<Vec<PullRequest>> {
+        let mut url = self.url(&[project, "_apis", "git", "pullrequests"]);
+        url.query_pairs_mut().extend_pairs(params);
+        let prs: ListResponse<RawPullRequest> = self.get_json(url).await?;
+        Ok(prs
+            .value
+            .into_iter()
+            .map(|raw| model::map_pull_request(self.org(), &self.session.user_id, raw))
+            .collect())
     }
 
     async fn project_pull_requests(
