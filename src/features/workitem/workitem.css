@@ -1,0 +1,111 @@
+/* Work item detail: extras on top of the shared `.detail*` classes in styles.css. */
+
+.wi-main {
+  min-width: 0;
+}
+
+.wi-loading {
+  display: flex;
+  justify-content: center;
+  padding: 48px 0;
+}
+
+.wi-error {
+  padding: 24px 28px;
+}
+
+.wi-person {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wi-unassigned {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.wi-sub {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.wi-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.wi-edited {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.wi-link-group + .wi-link-group {
+  margin-top: 10px;
+}
+
+.wi-link-group-title {
+  margin: 0 0 4px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.wi-links {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wi-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 6px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  text-align: left;
+  color: var(--text);
+}
+
+button.wi-link:hover {
+  background: var(--surface-hover);
+}
+
+.wi-link.is-static {
+  color: var(--text-muted);
+}
+
+.wi-link .wi-sub {
+  display: inline;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.wi-link-id {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.wi-link-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wi-dev-icon {
+  width: 16px;
+  flex-shrink: 0;
+  text-align: center;
+  color: var(--text-muted);
+}
