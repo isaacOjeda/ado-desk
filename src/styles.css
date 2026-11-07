@@ -1,31 +1,24 @@
+/*
+ * Colors come only from theme tokens (src/themes/builtin.json), written onto <html> by
+ * ThemeRoot together with `data-theme`, `data-theme-kind` and `data-translucency`.
+ *
+ * Glass layers (data-translucency="on"): the native window is translucent, so the page
+ * background is transparent; the sidebar and chrome (toolbars, detail headers) use the
+ * semi-transparent `--glass-*` tokens with a backdrop blur, and reading panes stay opaque
+ * on `--content-bg`. With data-translucency="off" every layer is opaque.
+ */
 :root {
-  --bg: #0b0c0e;
-  --sidebar: #0f1013;
-  --surface: #141519;
-  --surface-hover: #1a1c21;
-  --border: #22252b;
-  --border-strong: #2e323a;
-  --text: #e8e9ec;
-  --text-muted: #8b909a;
-  --text-faint: #5d626c;
-  --accent: #7b86ff;
-  --accent-strong: #929bff;
   --radius: 8px;
-
-  --tone-neutral: #8b909a;
-  --tone-blue: #5ea2ff;
-  --tone-green: #4cc38a;
-  --tone-amber: #e5b54a;
-  --tone-red: #f16a6a;
-  --tone-violet: #a78bfa;
-  --tone-orange: #f59e5b;
+  --glass-blur: blur(24px) saturate(1.6);
+  --reading-size: 14px;
+  --reading-leading: 1.65;
+  --reading-measure: 72ch;
 
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
   font-size: 13px;
   line-height: 1.45;
   color: var(--text);
   background: var(--bg);
-  color-scheme: dark;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -42,6 +35,16 @@ body,
   background: var(--bg);
   user-select: none;
   cursor: default;
+}
+
+:root[data-translucency="on"],
+[data-translucency="on"] body,
+[data-translucency="on"] #root {
+  background: transparent;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
 button {
@@ -84,6 +87,12 @@ a {
   background: var(--sidebar);
   border-right: 1px solid var(--border);
   padding: 0 10px 12px;
+}
+
+[data-translucency="on"] .sidebar {
+  background: var(--glass-sidebar);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
 }
 
 /* Leaves room for the macOS traffic lights and lets the user drag the window. */
@@ -172,7 +181,8 @@ a {
   height: 26px;
   flex-shrink: 0;
   border-radius: 50%;
-  background: linear-gradient(135deg, #5b63f5, #a78bfa);
+  background: linear-gradient(135deg, var(--brand-start), var(--brand-end));
+  color: var(--accent-contrast);
   font-size: 11px;
   font-weight: 600;
 }
@@ -184,6 +194,11 @@ a {
   /* Keeps long detail views scrolling inside .detail-body instead of growing the grid. */
   min-height: 0;
   overflow: hidden;
+  background: var(--bg);
+}
+
+[data-translucency="on"] .content {
+  background: transparent;
 }
 
 .toolbar {
@@ -194,6 +209,15 @@ a {
   padding: 0 20px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  background: var(--bg);
+}
+
+/* Shared glass chrome: toolbars, detail headers and the login card. */
+[data-translucency="on"] .toolbar,
+[data-translucency="on"] .detail-header {
+  background: var(--glass-chrome);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
 }
 
 .toolbar h2 {
@@ -221,6 +245,7 @@ a {
   flex: 1;
   overflow-y: auto;
   padding: 8px 12px 24px;
+  background: var(--content-bg);
 }
 
 .loading,
@@ -364,7 +389,7 @@ a {
 .btn-primary {
   height: 36px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast);
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -461,6 +486,10 @@ a {
     var(--bg);
 }
 
+[data-translucency="on"] .login {
+  background: radial-gradient(800px 400px at 50% -10%, color-mix(in srgb, var(--accent) 18%, transparent), transparent);
+}
+
 .login-card {
   display: flex;
   flex-direction: column;
@@ -470,7 +499,13 @@ a {
   border-radius: 14px;
   background: color-mix(in srgb, var(--surface) 85%, transparent);
   border: 1px solid var(--border);
-  box-shadow: 0 30px 80px -20px rgb(0 0 0 / 0.6);
+  box-shadow: 0 30px 80px -20px var(--shadow);
+}
+
+[data-translucency="on"] .login-card {
+  background: var(--glass-chrome);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
 }
 
 .login-card h1 {
@@ -490,7 +525,8 @@ a {
   width: 40px;
   height: 40px;
   border-radius: 10px;
-  background: linear-gradient(135deg, #5b63f5, #a78bfa);
+  background: linear-gradient(135deg, var(--brand-start), var(--brand-end));
+  color: var(--accent-contrast);
   font-size: 18px;
 }
 
@@ -562,6 +598,7 @@ a {
   padding: 0 28px 16px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  background: var(--bg);
 }
 
 .detail-topbar {
@@ -607,6 +644,7 @@ a {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  background: var(--content-bg);
 }
 
 /* Main column + right properties panel, like the Azure DevOps work item form. */
@@ -683,10 +721,12 @@ a {
   color: var(--text-faint);
 }
 
-/* Sanitized rich text coming from Azure DevOps. */
+/* Sanitized rich text coming from Azure DevOps: tuned for long-form reading. */
 .rich-text {
-  font-size: 13.5px;
-  line-height: 1.6;
+  max-width: var(--reading-measure);
+  font-size: var(--reading-size);
+  line-height: var(--reading-leading);
+  color: var(--text);
   overflow-wrap: anywhere;
   user-select: text;
   cursor: auto;
@@ -706,16 +746,39 @@ a {
 .rich-text pre,
 .rich-text table,
 .rich-text blockquote {
-  margin: 0 0 10px;
+  margin: 0 0 0.85em;
+}
+
+.rich-text li + li {
+  margin-top: 0.25em;
 }
 
 .rich-text h1,
 .rich-text h2,
 .rich-text h3,
 .rich-text h4 {
-  margin: 16px 0 8px;
-  font-size: 14px;
+  margin: 1.4em 0 0.5em;
+  font-size: 1em;
   font-weight: 600;
+  line-height: 1.35;
+}
+
+.rich-text h1 {
+  font-size: 1.25em;
+}
+
+.rich-text h2 {
+  font-size: 1.12em;
+}
+
+.rich-text a {
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent-strong) 40%, transparent);
+  text-underline-offset: 2px;
+}
+
+.rich-text a:hover {
+  text-decoration-color: currentColor;
 }
 
 .rich-text img {
@@ -727,6 +790,7 @@ a {
 
 .rich-text code {
   padding: 1px 5px;
+  font-size: 0.86em;
   border-radius: 4px;
   background: var(--surface-hover);
   color: var(--text);
@@ -736,6 +800,7 @@ a {
   padding: 12px;
   border-radius: var(--radius);
   background: var(--sidebar);
+  line-height: 1.5;
   border: 1px solid var(--border);
   overflow-x: auto;
 }

@@ -1,0 +1,253 @@
+/* Appearance settings section. Colors come from theme tokens only. */
+
+.appearance {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  max-width: 620px;
+}
+
+.appearance-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.appearance-text {
+  min-width: 0;
+}
+
+.appearance-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.appearance-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.appearance-hint {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.appearance-in-use {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-faint);
+}
+
+.appearance-note {
+  margin: 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+/* ---------- Theme cards ---------- */
+
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 12px;
+}
+
+.theme-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 6px 8px;
+  border-radius: 12px;
+  text-align: left;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  transition: border-color 120ms, box-shadow 120ms;
+}
+
+.theme-card:hover {
+  border-color: var(--border-strong);
+}
+
+.theme-card:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.theme-card.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.theme-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px;
+}
+
+.theme-card-name {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.theme-card-tag {
+  margin-left: auto;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+/* Mini window painted with the card's own tokens (declared inline on .theme-preview). */
+.theme-preview {
+  display: flex;
+  height: 88px;
+  overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.theme-preview-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 30%;
+  padding: 14px 6px 6px;
+  background: var(--sidebar);
+  border-right: 1px solid var(--border);
+}
+
+.theme-preview-nav {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--text-faint);
+  opacity: 0.6;
+}
+
+.theme-preview-nav.is-active {
+  background: var(--text);
+  opacity: 0.85;
+}
+
+.theme-preview-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.theme-preview-bar {
+  height: 14px;
+  flex-shrink: 0;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.theme-preview-page {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+  padding: 9px 10px;
+  background: var(--content-bg);
+}
+
+.theme-preview-title {
+  width: 60%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--text);
+}
+
+.theme-preview-line {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--text-muted);
+  opacity: 0.7;
+}
+
+.theme-preview-line.is-short {
+  width: 55%;
+}
+
+.theme-preview-chips {
+  display: flex;
+  gap: 4px;
+  margin-top: auto;
+}
+
+.theme-preview-chip {
+  width: 14px;
+  height: 6px;
+  border-radius: 3px;
+}
+
+.theme-preview-chip.is-accent {
+  width: 22px;
+  background: var(--accent);
+}
+
+.theme-preview-chip.is-green {
+  background: var(--tone-green);
+}
+
+.theme-preview-chip.is-amber {
+  background: var(--tone-amber);
+}
+
+.theme-preview-chip.is-red {
+  background: var(--tone-red);
+}
+
+/* ---------- Switch ---------- */
+
+.appearance-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 36px;
+  height: 20px;
+  padding: 0;
+  border-radius: 999px;
+  background: var(--border-strong);
+  transition: background 150ms;
+}
+
+.appearance-switch.is-on {
+  background: var(--accent);
+}
+
+.appearance-switch:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.appearance-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  box-shadow: 0 1px 2px var(--shadow);
+  transition: transform 150ms;
+}
+
+.appearance-switch.is-on .appearance-switch-thumb {
+  background: var(--accent-contrast);
+  transform: translateX(16px);
+}

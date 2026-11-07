@@ -288,7 +288,14 @@
   gap: 10px;
   padding: 10px 16px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--content-bg);
+}
+
+/* Code scrolls underneath the sticky file header. */
+[data-translucency="on"] .diff-header {
+  background: var(--glass-chrome);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
 }
 
 .diff-header-path {
@@ -373,7 +380,7 @@
 }
 
 .diff-add {
-  background: color-mix(in srgb, var(--tone-green) 13%, transparent);
+  background: var(--diff-inserted);
 }
 
 .diff-add .diff-marker {
@@ -381,7 +388,7 @@
 }
 
 .diff-delete {
-  background: color-mix(in srgb, var(--tone-red) 13%, transparent);
+  background: var(--diff-removed);
 }
 
 .diff-delete .diff-marker {
