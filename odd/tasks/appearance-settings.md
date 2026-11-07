@@ -19,11 +19,12 @@ Branch: feat/appearance-settings (stacked on feat/detail-views) · Delivery: ask
 - Default themes: light `paper`, dark `graphite`.
 
 ## Tasks
-- T1 [S5-S9] Contract files and stubs. Route: inline. Status: pending.
-- T2 [S4,S5,S6,S9] Rust settings store + events, settings window, glass window config, Profile section, gear button/shortcut. Route: delegated writer (parallel, worktree).
-- T3 [S1,S2,S3,S4,S7,S8] Theme data + contrast test, ThemeRoot, token-based CSS across the app with glass layers, Appearance section. Route: delegated writer (parallel, worktree).
+- T1 [S5-S9] Contract files and stubs. Route: inline. Status: done, commit fccf7fa.
+- T2 [S4,S5,S6,S9] Rust settings store + events, settings window, glass window config, Profile section, gear button/shortcut. Route: delegated writer (parallel, worktree). Status: done, commit 6a445e0 (cargo test 61 ok, clippy clean, tauri build ok).
+- T3 [S1,S2,S3,S4,S7,S8] Theme data + contrast test, ThemeRoot, token-based CSS across the app with glass layers, Appearance section. Route: delegated writer (parallel, worktree). Status: done, commit 15be3af (contrast test 5 ok; ratios text ≥12.19:1, muted ≥6.11:1).
 - T4 Seam check, visual check, verifier if a high-risk item applies.
 
 ## Log
 - L1 (2026-11-06) User request: "todo va genial, me gustaría enfocarme en la lectura, me gusta el modo dark pero también quiero modo light, y me gustaría usar un esquema de colores pensado para leer // esto me lleva a también tener una estética tipo glass de macOS (glass, acrilico, etc) y quisiera una ventana de settings, donde tengamos varias secciones, por ahora, que salga nuestro perfil (quienes somos y la organización que tenemos configurada) y una de apariencia, donde saldrá el color default que elijamos y aparte poder cambiar temas, por ahora con eso (a futuro quisiera poder importaer temas de Open VSX)"
 - L2 Route evidence: T2/T3 independent behaviors, disjoint surfaces, each several files; parallel worktrees (same Rust crate / shared CSS). Parent context past the long-session backstop.
+- L3 Seam check on merged branch: cargo test 61+5 ok, clippy clean, tsc ok, pnpm build ok, tauri debug build ok. Browser preview (mocked IPC) in light/dark: list, work item detail, Settings Profile and Appearance render as specified. Parent fixes: translucency only on macOS (Windows 10/Linux would show the desktop through a transparent page); detail properties panel stacks under the reading column below 1080px.

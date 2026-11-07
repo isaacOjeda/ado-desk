@@ -655,6 +655,13 @@ a {
   padding: 24px 28px 48px;
 }
 
+/* Narrow windows: keep the reading column wide and move the properties panel below it. */
+@media (max-width: 1080px) {
+  .detail-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .detail-aside {
   display: flex;
   flex-direction: column;

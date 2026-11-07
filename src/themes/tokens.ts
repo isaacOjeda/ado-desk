@@ -51,11 +51,19 @@ export function themeCssVariables(colors: ThemeColors): Record<string, string> {
   return vars;
 }
 
+/**
+ * Native vibrancy is only guaranteed on macOS. Elsewhere (Windows 10, Linux) a transparent
+ * page would show the desktop through the window, so translucency stays off.
+ */
+export function supportsTranslucency(userAgent: string = navigator.userAgent): boolean {
+  return /Macintosh|Mac OS X/i.test(userAgent);
+}
+
 /** Writes the theme onto an element (normally <html>): variables, data attributes and color-scheme. */
 export function applyTheme(root: HTMLElement, theme: Theme, translucency: boolean): void {
   for (const [name, value] of Object.entries(themeCssVariables(theme.colors))) root.style.setProperty(name, value);
   root.style.colorScheme = theme.kind;
   root.dataset.theme = theme.id;
   root.dataset.themeKind = theme.kind;
-  root.dataset.translucency = translucency ? "on" : "off";
+  root.dataset.translucency = translucency && supportsTranslucency() ? "on" : "off";
 }
