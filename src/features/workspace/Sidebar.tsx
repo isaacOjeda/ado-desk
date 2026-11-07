@@ -9,6 +9,7 @@ interface Props {
   counts: Record<View, number | null>;
   onSelect: (view: View) => void;
   onSignOut: () => void;
+  onOpenSettings: () => void;
 }
 
 const NAV: { view: View; label: string; icon: string }[] = [
@@ -16,7 +17,7 @@ const NAV: { view: View; label: string; icon: string }[] = [
   { view: "pullRequests", label: "Pull requests", icon: "⇄" },
 ];
 
-export function Sidebar({ session, view, counts, onSelect, onSignOut }: Props) {
+export function Sidebar({ session, view, counts, onSelect, onSignOut, onOpenSettings }: Props) {
   return (
     <aside className="sidebar">
       <div className="sidebar-top" data-tauri-drag-region />
@@ -48,6 +49,14 @@ export function Sidebar({ session, view, counts, onSelect, onSignOut }: Props) {
         <span className="user-name" title={session.displayName}>
           {session.displayName}
         </span>
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={onOpenSettings}
+          title="Settings (⌘,)"
+          aria-label="Settings"
+        >
+          <span aria-hidden>⚙</span>
+        </button>
         <button className="btn btn-ghost btn-sm" onClick={onSignOut}>
           Sign out
         </button>

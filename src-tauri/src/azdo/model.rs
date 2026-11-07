@@ -19,6 +19,8 @@ pub struct Session {
     pub organization: String,
     pub user_id: String,
     pub display_name: String,
+    /// Sign-in address from the identity's `Account` property, when it looks like an email.
+    pub email: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -81,6 +83,9 @@ pub struct RawIdentity {
     pub provider_display_name: Option<String>,
     #[serde(default)]
     pub display_name: Option<String>,
+    /// Identity property bag, e.g. `{ "Account": { "$value": "ada@contoso.com" } }`.
+    #[serde(default)]
+    pub properties: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -190,6 +195,14 @@ pub fn build_url(segments: &[&str]) -> Url {
 
 pub fn session_from(organization: &str, data: ConnectionData) -> Session {
     let user = data.authenticated_user;
+    let email = user
+        .properties
+        .as_ref()
+        .and_then(|p| p.pointer("/Account/$value"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|account| account.contains('@'))
+        .map(str::to_string);
     let display_name = user
         .provider_display_name
         .or(user.display_name)
@@ -198,6 +211,7 @@ pub fn session_from(organization: &str, data: ConnectionData) -> Session {
         organization: organization.to_string(),
         user_id: user.id,
         display_name,
+        email,
     }
 }
 
@@ -345,6 +359,33 @@ mod tests {
         assert_eq!(session.user_id, ME);
         assert_eq!(session.display_name, "Ada Lovelace");
         assert_eq!(session.organization, "contoso");
+        assert_eq!(session.email, None);
+    }
+
+    #[test]
+    fn session_reads_email_from_account_property() {
+        let data: ConnectionData = serde_json::from_value(json!({
+            "authenticatedUser": {
+                "id": ME,
+                "providerDisplayName": "Ada Lovelace",
+                "properties": { "Account": { "$type": "System.String", "$value": "ada@contoso.com" } }
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(session_from("contoso", data).email.as_deref(), Some("ada@contoso.com"));
+    }
+
+    #[test]
+    fn session_ignores_missing_or_non_email_account_property() {
+        for properties in [json!({}), json!({ "Account": { "$value": "" } }), json!({ "Account": { "$value": "svc-bot" } }), json!("x")] {
+            let data: ConnectionData = serde_json::from_value(json!({
+                "authenticatedUser": { "id": ME, "properties": properties }
+            }))
+            .unwrap();
+
+            assert_eq!(session_from("contoso", data).email, None, "properties: {properties}");
+        }
     }
 
     #[test]

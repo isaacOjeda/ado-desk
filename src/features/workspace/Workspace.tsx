@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type ApiError, type PullRequest, type Session, type WorkItem } from "../../lib/api";
+import { settingsApi } from "../../lib/settings";
 import { useResource } from "../../lib/useResource";
 import { ErrorBanner, Spinner } from "../../components/ui";
 import { Sidebar, type View } from "./Sidebar";
@@ -26,6 +27,10 @@ const TITLES: Record<View, string> = {
   pullRequests: "Pull requests",
 };
 
+function openSettings() {
+  settingsApi.openWindow().catch((err: unknown) => console.error("Could not open settings", err));
+}
+
 function matches(query: string, ...values: (string | number)[]) {
   const q = query.trim().toLowerCase();
   return !q || values.some((v) => String(v).toLowerCase().includes(q));
@@ -46,9 +51,15 @@ export function Workspace({ session, onSignOut, onUnauthorized }: Props) {
     if (failed.some((e) => e?.kind === "unauthorized" || e?.kind === "notSignedIn")) onUnauthorized();
   }, [workItems.error, pullRequests.error, onUnauthorized]);
 
-  // Esc closes a detail view; Cmd/Ctrl+R refreshes the list instead of reloading the webview.
+  // Esc closes a detail view; Cmd/Ctrl+R refreshes the list instead of reloading the webview;
+  // Cmd/Ctrl+, opens Settings.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === ",") {
+        e.preventDefault();
+        openSettings();
+        return;
+      }
       if (e.key === "Escape" && selection) {
         setSelection(null);
         return;
@@ -95,6 +106,7 @@ export function Workspace({ session, onSignOut, onUnauthorized }: Props) {
           setView(next);
         }}
         onSignOut={onSignOut}
+        onOpenSettings={openSettings}
       />
 
       <main className="content">

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ApiError, api, type Session } from "./lib/api";
+import { ApiError, api, onSessionChanged, subscribe, type Session } from "./lib/api";
 import { LoginView } from "./features/auth/LoginView";
 import { Workspace } from "./features/workspace/Workspace";
 import { Spinner } from "./components/ui";
@@ -27,6 +27,17 @@ export default function App() {
         }),
       );
   }, []);
+
+  // Signing out from another window (Settings) signs this one out too.
+  useEffect(
+    () =>
+      subscribe(() =>
+        onSessionChanged((session) => {
+          if (!session) setAuth((current) => (current.status === "signedIn" ? { status: "signedOut" } : current));
+        }),
+      ),
+    [],
+  );
 
   const signOut = useCallback(() => {
     void api.logout().finally(() => setAuth({ status: "signedOut" }));

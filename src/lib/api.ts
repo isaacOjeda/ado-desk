@@ -1,9 +1,35 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 export interface Session {
   organization: string;
   userId: string;
   displayName: string;
+  /** Sign-in email, when Azure DevOps exposes one. */
+  email: string | null;
+}
+
+/** Emitted by Rust to every window after sign-in or sign-out; payload is the session or null. */
+export const SESSION_CHANGED_EVENT = "session-changed";
+
+export function onSessionChanged(handler: (session: Session | null) => void): Promise<UnlistenFn> {
+  return listen<Session | null>(SESSION_CHANGED_EVENT, (event) => handler(event.payload));
+}
+
+/**
+ * Subscribes from a React effect. Handles `listen` resolving after cleanup
+ * (StrictMode double effects) so no listener leaks. Returns the cleanup.
+ */
+export function subscribe(start: () => Promise<UnlistenFn>): () => void {
+  let unlisten: UnlistenFn | undefined;
+  let cancelled = false;
+  start()
+    .then((stop) => (cancelled ? stop() : (unlisten = stop)))
+    .catch(() => {});
+  return () => {
+    cancelled = true;
+    unlisten?.();
+  };
 }
 
 export interface WorkItem {

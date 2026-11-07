@@ -5,11 +5,13 @@ mod error;
 mod image_proxy;
 mod pull_requests;
 mod rich_text;
+mod settings;
 mod work_items;
 
 use std::sync::{Arc, RwLock};
 
 use azdo::AzdoClient;
+use tauri::Manager;
 
 /// The signed-in client, shared across commands. `None` while signed out.
 #[derive(Default)]
@@ -22,6 +24,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(AppState::default())
+        .setup(|app| {
+            let path = app.path().app_config_dir()?.join(settings::FILE_NAME);
+            app.manage(settings::SettingsState::load(path));
+            Ok(())
+        })
         .register_asynchronous_uri_scheme_protocol(rich_text::PROXY_SCHEME, |ctx, request, responder| {
             let app = ctx.app_handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -32,6 +39,10 @@ pub fn run() {
             commands::login,
             commands::restore_session,
             commands::logout,
+            commands::current_session,
+            commands::get_settings,
+            commands::update_settings,
+            commands::open_settings_window,
             commands::list_work_items,
             commands::list_pull_requests,
             work_items::get_work_item,

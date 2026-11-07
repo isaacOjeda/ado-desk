@@ -10,15 +10,40 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
+        "label": "main",
         "title": "ADO Desk",
         "width": 1200,
         "height": 780,
         "minWidth": 900,
         "minHeight": 560,
         "titleBarStyle": "Overlay",
-        "hiddenTitle": true
+        "hiddenTitle": true,
+        "transparent": true,
+        "windowEffects": {
+          "effects": ["sidebar", "mica"],
+          "state": "followsWindowActiveState"
+        }
+      },
+      {
+        "label": "settings",
+        "create": false,
+        "url": "index.html#settings",
+        "title": "Settings",
+        "width": 760,
+        "height": 540,
+        "minWidth": 640,
+        "minHeight": 440,
+        "maximizable": false,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "transparent": true,
+        "windowEffects": {
+          "effects": ["sidebar", "mica"],
+          "state": "followsWindowActiveState"
+        }
       }
     ],
     "security": {
