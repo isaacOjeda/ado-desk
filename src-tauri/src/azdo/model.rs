@@ -23,7 +23,7 @@ pub struct Session {
     pub email: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkItem {
     pub id: i64,
@@ -36,7 +36,7 @@ pub struct WorkItem {
     pub url: String,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum PullRequestRole {
     Author,
@@ -44,7 +44,7 @@ pub enum PullRequestRole {
 }
 
 /// Lifecycle state of a pull request in list views. Drafts are `Active` with `is_draft`.
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum PullRequestState {
     Active,
@@ -52,7 +52,7 @@ pub enum PullRequestState {
     Abandoned,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PullRequest {
     pub id: i64,

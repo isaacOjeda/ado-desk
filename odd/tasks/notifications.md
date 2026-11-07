@@ -16,7 +16,7 @@ Branch: feat/notifications · Delivery: ask-on-risk · Test runner: `cargo test`
 
 ## Tasks
 - T0 [S7] Phase 2 follow-ups. Route: inline. Risk: none. Status: done, see L3.
-- T1 [S2, S3, S4] Pure detection rules + Inbox/seen-state store with tests. Route: inline. Risk: none (new files). Status: pending.
+- T1 [S2, S3, S4] Pure detection rules + Inbox/seen-state store with tests. Route: inline. Risk: none (new files; `WorkItem`, `PullRequest`, `SearchHit` gain `Deserialize`). Status: done, see L4.
 - T2 [S2-S6] Poller, fetchers, native notifications, badges, commands, settings shape. Route: inline. Risk: items 2 (stored PATs of every organization used in the background), 4 (background task and shared state), 5 (`tauri-plugin-notification`). Status: pending.
 - T3 [S4, S5] Inbox view, sidebar count, Settings > Notifications. Route: inline. Risk: none expected. Status: pending.
 - T4 [S1-S7] Independent verifier (items 2, 4, 5). Status: pending.
@@ -25,3 +25,4 @@ Branch: feat/notifications · Delivery: ask-on-risk · Test runner: `cargo test`
 - L1 (2026-11-07) User accepted: "that works" (signals: review requests, new assignments, new comments on your PRs/work items; every 5 minutes, adjustable).
 - L2 Evidence: tauri-plugin-notification docs mark Actions/onAction as "Mobile Only", so desktop notifications cannot carry a click target -> Inbox. PR list fetching (`queries::fetch_pull_requests`, role Mine + status Active) returns both authored and reviewing PRs with `role`, `my_vote`, `is_draft`; `AzdoClient::my_work_items` returns open assigned items with `changed_at`; PR threads (`RawThread`/`RawComment` with author id) and work item comments (`7.1-preview.4`, `created_by` identity) already have raw types.
 - L3 T0: `install_tray` failure is logged and startup continues; `background::TRAY_READY` gates hide-on-close (without a tray the main window closes as before). Startup and each successful settings save record the shortcut state; new command `global_shortcut_problem` feeds a notice in Settings > Shortcuts ("That shortcut could not be registered; another app may be using it. Record another shortcut, or use Search… in the menu bar icon."). No unit test (GUI/plugin wiring); cargo test 164 + 5 ok, clippy clean, tsc + build ok.
+- L4 T1: `notifications/rules.rs` (`is_review_request`, `authored_to_check`, `work_items_to_check`, `diff` with baseline-only first check, per-target comment seeding, pruning of items no longer current) and `notifications/store.rs` (Inbox text, merge capped at 100, mark read, summary above 3, JSON load/save via `settings::write_atomic`). RED 7/7 and 6/6 (`todo!` stubs) then GREEN 13/13; one GREEN fix (title cap applied after the prefix). Dead-code warnings until T2 wires the poller.

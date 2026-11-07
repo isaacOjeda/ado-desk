@@ -4,6 +4,7 @@ mod commands;
 mod credentials;
 mod error;
 mod image_proxy;
+mod notifications;
 mod pull_requests;
 mod queries;
 mod rich_text;

@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::AppState;
@@ -152,7 +152,7 @@ pub fn combine(outcomes: Vec<(String, QueryResult<Vec<SearchHit>>)>) -> SearchRe
 
 /// One result, with the organization it belongs to. Items have the same shape as the
 /// lists, so the workspace opens them without another request.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum SearchHit {
     #[serde(rename_all = "camelCase")]
