@@ -40,6 +40,19 @@ pub const INVALID_SHORTCUT: &str = "That shortcut is not supported: use Command,
      Shift) plus a letter, number, function or punctuation key";
 pub const SHORTCUT_UNAVAILABLE: &str = "That shortcut could not be registered; another app may be using it";
 
+/// Why the saved shortcut is not active (set at startup and after each change), if it is not.
+static SHORTCUT_PROBLEM: std::sync::Mutex<Option<&'static str>> = std::sync::Mutex::new(None);
+
+pub fn set_shortcut_problem(problem: Option<&'static str>) {
+    *SHORTCUT_PROBLEM.lock().unwrap_or_else(|e| e.into_inner()) = problem;
+}
+
+/// Settings > Shortcuts: why the saved shortcut is inactive, or `None` when it works (or is off).
+#[tauri::command]
+pub fn global_shortcut_problem() -> Option<String> {
+    SHORTCUT_PROBLEM.lock().unwrap_or_else(|e| e.into_inner()).map(str::to_string)
+}
+
 fn active_shortcut(settings: &SearchSettings) -> Option<tauri_plugin_global_shortcut::Shortcut> {
     settings.global_shortcut_enabled.then(|| parse_shortcut(&settings.global_shortcut)).flatten()
 }

@@ -332,6 +332,8 @@ pub async fn update_settings(
         let _update = state.updates.lock().unwrap_or_else(|e| e.into_inner());
         let previous = state.current();
         crate::search_bar::sync_shortcut(&app, Some(&previous.search), &settings.search)?;
+        // The new shortcut (or none) is active now.
+        crate::search_bar::set_shortcut_problem(None);
         if let Err(e) = settings::save(&state.path, &settings) {
             let _ = crate::search_bar::sync_shortcut(&app, Some(&settings.search), &previous.search);
             return Err(format!("Could not save settings: {e}"));

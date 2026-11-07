@@ -3,11 +3,17 @@
 
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::TrayIconBuilder;
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use tauri::{AppHandle, Manager, Window, WindowEvent};
 
 use crate::commands;
 
 pub const MAIN_WINDOW: &str = "main";
+
+/// Whether the menu bar icon exists. Without it, closing the main window quits as before,
+/// since there would be no way back on Windows/Linux.
+static TRAY_READY: AtomicBool = AtomicBool::new(false);
 
 const OPEN: &str = "open";
 const SEARCH: &str = "search";
@@ -57,6 +63,7 @@ pub fn install_tray(app: &AppHandle) -> tauri::Result<()> {
         tray = tray.icon(icon.clone());
     }
     tray.build(app)?;
+    TRAY_READY.store(true, Ordering::Relaxed);
     Ok(())
 }
 
@@ -64,6 +71,7 @@ pub fn install_tray(app: &AppHandle) -> tauri::Result<()> {
 pub fn on_window_event(window: &Window, event: &WindowEvent) {
     crate::search_bar::on_window_event(window, event);
     if window.label() == MAIN_WINDOW
+        && TRAY_READY.load(Ordering::Relaxed)
         && let WindowEvent::CloseRequested { api, .. } = event
     {
         api.prevent_close();

@@ -1,7 +1,7 @@
 // Shortcuts settings: the global shortcut that opens the floating search bar. Rust validates
 // and registers it; an invalid or taken combination comes back as a save error.
-import { useState, type KeyboardEvent } from "react";
-import type { SearchSettings, Settings } from "../../lib/settings";
+import { useEffect, useState, type KeyboardEvent } from "react";
+import { settingsApi, type SearchSettings, type Settings } from "../../lib/settings";
 import "./appearance.css";
 
 const MAC = navigator.userAgent.includes("Mac");
@@ -55,6 +55,15 @@ export function ShortcutsSection({ settings, onChange }: Props) {
   const search = settings.search;
   const [recording, setRecording] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  // Rechecked whenever the stored shortcut settings change (a successful save clears it).
+  useEffect(() => {
+    settingsApi
+      .shortcutProblem()
+      .then(setProblem)
+      .catch(() => setProblem(null));
+  }, [search.globalShortcut, search.globalShortcutEnabled]);
   const update = (patch: Partial<SearchSettings>) => onChange({ ...settings, search: { ...search, ...patch } });
 
   const record = (event: KeyboardEvent<HTMLButtonElement>) => {
@@ -100,6 +109,12 @@ export function ShortcutsSection({ settings, onChange }: Props) {
           <span className="appearance-switch-thumb" />
         </button>
       </section>
+
+      {problem && search.globalShortcutEnabled && (
+        <p className="theme-import-notice is-error" role="alert">
+          {problem}. Record another shortcut, or use Search… in the menu bar icon.
+        </p>
+      )}
 
       <section className={`appearance-row${search.globalShortcutEnabled ? "" : " is-disabled"}`}>
         <div className="appearance-text">

@@ -42,7 +42,7 @@ fn install_global_shortcut(app: &tauri::AppHandle) -> tauri::Result<()> {
             .build(),
     )?;
     let search = app.state::<settings::SettingsState>().current().search;
-    let _ = search_bar::sync_shortcut(app, None, &search);
+    search_bar::set_shortcut_problem(search_bar::sync_shortcut(app, None, &search).err());
     Ok(())
 }
 
@@ -57,7 +57,10 @@ pub fn run() {
             app.manage(settings::SettingsState::load(path));
             let themes_path = app.path().app_config_dir()?.join(themes::store::FILE_NAME);
             app.manage(themes::ThemesState::load(themes_path));
-            background::install_tray(app.handle())?;
+            // The app still starts without a menu bar icon; the main window then quits on close.
+            if let Err(err) = background::install_tray(app.handle()) {
+                eprintln!("menu bar icon unavailable: {err}");
+            }
             install_global_shortcut(app.handle())?;
             Ok(())
         })
@@ -97,6 +100,7 @@ pub fn run() {
             search::quick_search,
             search_bar::hide_search_bar,
             search_bar::open_search_hit,
+            search_bar::global_shortcut_problem,
             themes::search_theme_extensions,
             themes::import_theme_extension,
             themes::list_imported_themes,

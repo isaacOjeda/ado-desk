@@ -41,6 +41,8 @@ export const settingsApi = {
   /** Persists the full settings object and broadcasts it; resolves with the stored value. */
   update: (settings: Settings) => call<Settings>("update_settings", { settings }),
   openWindow: () => call<void>("open_settings_window"),
+  /** Why the saved global shortcut is not active (for example taken at startup), or null. */
+  shortcutProblem: () => call<string | null>("global_shortcut_problem"),
   /** Signed-in session held by Rust (no network call); null when signed out. */
   currentSession: () => call<Session | null>("current_session"),
   onChanged: (handler: (settings: Settings) => void): Promise<UnlistenFn> =>
