@@ -59,13 +59,17 @@ export function supportsTranslucency(userAgent: string = navigator.userAgent): b
   return /Macintosh|Mac OS X/i.test(userAgent);
 }
 
+/** Most transparency each glass layer reaches at intensity 100. Reading panes keep the highest floor. */
+const MAX_TRANSPARENCY = { sidebar: 0.6, chrome: 0.48, content: 0.3 } as const;
+
 /**
- * Opacity of a glass layer for a 0-100 intensity. At 50 it reproduces the original fixed
- * values (sidebar 0.70, chrome 0.76); at 100 layers keep a legibility floor (0.40 / 0.52).
+ * Opacity of a glass layer for a 0-100 intensity. At 50 sidebar and chrome reproduce the
+ * original fixed values (0.70 / 0.76) and reading panes sit at 0.85; at 100 every layer keeps
+ * a legibility floor (sidebar 0.40, chrome 0.52, content 0.70).
  */
-export function glassAlpha(layer: "sidebar" | "chrome", intensity: number): number {
+export function glassAlpha(layer: keyof typeof MAX_TRANSPARENCY, intensity: number): number {
   const amount = Math.min(100, Math.max(0, Number.isFinite(intensity) ? intensity : 50)) / 100;
-  const maxTransparency = layer === "sidebar" ? 0.6 : 0.48;
+  const maxTransparency = MAX_TRANSPARENCY[layer];
   return Math.round((1 - amount * maxTransparency) * 1000) / 1000;
 }
 
@@ -82,6 +86,7 @@ export function applyTheme(root: HTMLElement, theme: Theme, translucency: boolea
   for (const [name, value] of Object.entries(themeCssVariables(theme.colors))) root.style.setProperty(name, value);
   root.style.setProperty("--glass-sidebar", withAlpha(theme.colors.glassSidebar, glassAlpha("sidebar", glassIntensity)));
   root.style.setProperty("--glass-chrome", withAlpha(theme.colors.glassChrome, glassAlpha("chrome", glassIntensity)));
+  root.style.setProperty("--glass-content", withAlpha(theme.colors.contentBg, glassAlpha("content", glassIntensity)));
   root.style.colorScheme = theme.kind;
   root.dataset.theme = theme.id;
   root.dataset.themeKind = theme.kind;

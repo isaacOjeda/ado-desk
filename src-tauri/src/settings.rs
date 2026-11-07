@@ -35,7 +35,7 @@ pub struct AppearanceSettings {
     pub glass_intensity: u8,
 }
 
-/// Matches the original fixed glass opacity (sidebar 70%, chrome 76%).
+/// Matches the original fixed glass opacity (sidebar 70%, chrome 76%); reading panes sit at 85%.
 pub const DEFAULT_GLASS_INTENSITY: u8 = 50;
 
 impl Default for AppearanceSettings {

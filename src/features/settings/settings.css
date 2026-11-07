@@ -209,6 +209,10 @@
   background: var(--glass-sidebar, var(--sidebar));
 }
 
+:root[data-translucency="on"] .settings-content {
+  background: var(--glass-content, var(--content-bg));
+}
+
 :root[data-translucency="on"] .settings-header {
   background: var(--glass-chrome, var(--surface));
 }

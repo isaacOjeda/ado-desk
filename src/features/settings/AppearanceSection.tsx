@@ -70,7 +70,7 @@ export function AppearanceSection({ settings, onChange }: AppearanceSectionProps
           <h3 className="appearance-label" id="appearance-translucency">
             Translucency
           </h3>
-          <p className="appearance-hint">Let the desktop show through the sidebar and toolbars. Off paints solid surfaces.</p>
+          <p className="appearance-hint">Let the desktop show through the whole window. Off paints solid surfaces.</p>
         </div>
         <button
           type="button"
@@ -222,7 +222,7 @@ function GlassIntensity({
         <p className="appearance-hint">
           {disabled
             ? "Available when translucency is on (macOS)."
-            : "How much of the desktop shows through the sidebar and toolbars. Reading panes stay solid."}
+            : "How much of the desktop shows through the window. Reading panes keep a higher opacity floor."}
         </p>
       </div>
       <div className="appearance-slider">

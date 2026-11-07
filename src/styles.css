@@ -2,10 +2,12 @@
  * Colors come only from theme tokens (src/themes/builtin.json), written onto <html> by
  * ThemeRoot together with `data-theme`, `data-theme-kind` and `data-translucency`.
  *
- * Glass layers (data-translucency="on"): the native window is translucent, so the page
- * background is transparent; the sidebar and chrome (toolbars, detail headers) use the
- * semi-transparent `--glass-*` tokens with a backdrop blur, and reading panes stay opaque
- * on `--content-bg`. With data-translucency="off" every layer is opaque.
+ * Glass layers (data-translucency="on"): the native window is translucent and the whole
+ * window shows it. The page and the content column are transparent; the sidebar and chrome
+ * (toolbars, detail headers) use `--glass-sidebar` / `--glass-chrome` with a backdrop blur,
+ * and reading panes use `--glass-content` (`--content-bg` with a higher opacity floor, no
+ * backdrop blur: the native material already blurs the desktop). Only one element per column
+ * carries the alpha, so layers never compound. With data-translucency="off" every layer is opaque.
  */
 :root {
   --radius: 8px;
@@ -246,6 +248,16 @@ a {
   overflow-y: auto;
   padding: 8px 12px 24px;
   background: var(--content-bg);
+}
+
+/* Whole-window glass: the column lets the native material through, reading panes tint it. */
+[data-translucency="on"] .content {
+  background: transparent;
+}
+
+[data-translucency="on"] .panel,
+[data-translucency="on"] .detail-body {
+  background: var(--glass-content);
 }
 
 .loading,
