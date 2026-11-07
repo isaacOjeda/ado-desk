@@ -1,0 +1,148 @@
+// Files tab: changed file list on the left, the selected file's diff (loaded on demand) on the right.
+import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { Badge, EmptyState } from "../../components/ui";
+import type { PullRequest } from "../../lib/api";
+import { useResource, type Resource } from "../../lib/useResource";
+import { pullRequestApi, type FileChange, type FileDiff, type PullRequestFiles, type PullRequestThread } from "./api";
+import { DiffHeader, DiffView } from "./Diff";
+import { Async } from "./Async";
+import { changeTypeBadge, directory, fileName, threadCountsByPath } from "./format";
+
+type PullRequestRef = Pick<PullRequest, "project" | "repositoryId" | "id" | "url">;
+
+const FileRow = memo(function FileRow({
+  file,
+  selected,
+  comments,
+  onSelect,
+}: {
+  file: FileChange;
+  selected: boolean;
+  comments: number;
+  onSelect: (path: string) => void;
+}) {
+  const badge = changeTypeBadge(file.changeType);
+  const dir = directory(file.path);
+  return (
+    <li>
+      <button
+        className={`pr-file${selected ? " is-active" : ""}`}
+        onClick={() => onSelect(file.path)}
+        title={file.originalPath ? `${file.originalPath} → ${file.path}` : file.path}
+        aria-current={selected || undefined}
+      >
+        <span className={`pr-file-type tone-${badge.tone}`} aria-label={badge.label}>
+          {badge.letter}
+        </span>
+        <span className="pr-file-main">
+          <span className="pr-file-name">{fileName(file.path)}</span>
+          {dir && <span className="pr-file-dir">{dir}</span>}
+        </span>
+        {comments > 0 && (
+          <span className="pr-file-comments" title={`${comments} comment thread${comments === 1 ? "" : "s"}`}>
+            <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden>
+              <path
+                d="M2 3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5v6a1.5 1.5 0 0 1-1.5 1.5H7l-3 3v-3h-.5A1.5 1.5 0 0 1 2 9.5z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.3"
+              />
+            </svg>
+            {comments}
+          </span>
+        )}
+      </button>
+    </li>
+  );
+});
+
+function DiffPanel({
+  pr,
+  file,
+  threads,
+  cache,
+}: {
+  pr: PullRequestRef;
+  file: FileChange;
+  threads: PullRequestThread[];
+  cache: Map<string, FileDiff>;
+}) {
+  const { project, repositoryId, id } = pr;
+  const fetcher = useCallback(async () => {
+    const cached = cache.get(file.path);
+    if (cached) return cached;
+    const diff = await pullRequestApi.fileDiff({ project, repositoryId, id }, file);
+    cache.set(file.path, diff);
+    return diff;
+  }, [cache, file, project, repositoryId, id]);
+  const diff = useResource(fetcher);
+  const fileThreads = useMemo(() => threads.filter((t) => t.kind === "file" && t.filePath === file.path), [threads, file.path]);
+
+  return (
+    <div className="pr-diff">
+      <DiffHeader file={file} diff={diff.data} />
+      <Async resource={diff}>
+        {(data) => <DiffView file={file} diff={data} threads={fileThreads} webUrl={pr.url} />}
+      </Async>
+    </div>
+  );
+}
+
+function FilesPane({
+  pr,
+  files,
+  truncated,
+  threads,
+}: {
+  pr: PullRequestRef;
+  files: FileChange[];
+  truncated: boolean;
+  threads: PullRequestThread[];
+}) {
+  const [selectedPath, setSelectedPath] = useState<string | null>(files[0]?.path ?? null);
+  const cache = useRef(new Map<string, FileDiff>()).current;
+  const counts = useMemo(() => threadCountsByPath(threads), [threads]);
+  const selected = files.find((f) => f.path === selectedPath) ?? files[0];
+
+  if (!selected) return <EmptyState title="No file changes" hint="This pull request does not change any file." />;
+
+  return (
+    <div className="pr-files">
+      <nav className="pr-file-list" aria-label="Changed files">
+        {truncated && (
+          <p className="pr-truncated">
+            <Badge tone="amber">Partial</Badge> Only the first {files.length} files are listed.
+          </p>
+        )}
+        <ul className="pr-plain-list">
+          {files.map((file) => (
+            <FileRow
+              key={file.path}
+              file={file}
+              selected={file.path === selected.path}
+              comments={counts.get(file.path) ?? 0}
+              onSelect={setSelectedPath}
+            />
+          ))}
+        </ul>
+      </nav>
+      <DiffPanel key={selected.path} pr={pr} file={selected} threads={threads} cache={cache} />
+    </div>
+  );
+}
+
+export function FilesTab({
+  pr,
+  files,
+  threads,
+}: {
+  pr: PullRequestRef;
+  files: Resource<PullRequestFiles>;
+  threads: PullRequestThread[];
+}) {
+  return (
+    <Async resource={files}>
+      {(data) => <FilesPane pr={pr} files={data.files} truncated={data.truncated} threads={threads} />}
+    </Async>
+  );
+}
