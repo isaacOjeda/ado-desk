@@ -73,7 +73,7 @@ impl SettingsState {
 pub const MAX_THEME_ID_LEN: usize = 64;
 
 /// Theme ids are short slugs (`[a-z0-9-]`), which also fits ids derived from Open VSX themes.
-fn is_valid_theme_id(id: &str) -> bool {
+pub fn is_valid_theme_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= MAX_THEME_ID_LEN
         && id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
@@ -103,16 +103,21 @@ pub fn load(path: &Path) -> Settings {
 /// Writes settings to a sibling temp file and renames it over `path`, so a
 /// crash mid-write never leaves a truncated settings file.
 pub fn save(path: &Path, settings: &Settings) -> std::io::Result<()> {
+    let json = serde_json::to_vec_pretty(settings).map_err(std::io::Error::other)?;
+    write_atomic(path, &json)
+}
+
+/// Writes `bytes` to a sibling temp file, syncs it and renames it over `path`.
+pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir)?;
     }
-    let json = serde_json::to_vec_pretty(settings).map_err(std::io::Error::other)?;
     let mut tmp_name = path.as_os_str().to_owned();
     tmp_name.push(".tmp");
     let tmp = PathBuf::from(tmp_name);
     {
         let mut file = fs::File::create(&tmp)?;
-        file.write_all(&json)?;
+        file.write_all(bytes)?;
         file.sync_all()?;
     }
     fs::rename(&tmp, path)

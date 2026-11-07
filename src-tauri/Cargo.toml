@@ -30,6 +30,7 @@ url = "2.5.8"
 ammonia = "4.2.4"
 pulldown-cmark = "0.13.6"
 similar = "3.2.1"
+zip = { version = "9.4.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

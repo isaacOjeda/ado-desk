@@ -22,6 +22,15 @@ pub enum AppError {
     Decode(String),
     #[error("Credential store error: {0}")]
     Credentials(String),
+    // Theme import (Open VSX). Messages are fixed text: the search or id typed is never echoed.
+    #[error("Search text must be at most 100 characters, without line breaks")]
+    InvalidThemeSearch,
+    #[error("Invalid Open VSX extension identifier")]
+    InvalidExtension,
+    #[error("Open VSX returned HTTP {status}")]
+    OpenVsx { status: u16 },
+    #[error("{0}")]
+    ThemeImport(&'static str),
 }
 
 impl AppError {
@@ -36,6 +45,10 @@ impl AppError {
             AppError::Network(_) => "network",
             AppError::Decode(_) => "decode",
             AppError::Credentials(_) => "credentials",
+            AppError::InvalidThemeSearch => "invalidThemeSearch",
+            AppError::InvalidExtension => "invalidExtension",
+            AppError::OpenVsx { .. } => "openVsx",
+            AppError::ThemeImport(_) => "themeImport",
         }
     }
 }

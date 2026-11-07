@@ -7,6 +7,7 @@ mod pull_requests;
 mod queries;
 mod rich_text;
 mod settings;
+mod themes;
 mod work_items;
 
 use std::sync::RwLock;
@@ -29,6 +30,8 @@ pub fn run() {
         .setup(|app| {
             let path = app.path().app_config_dir()?.join(settings::FILE_NAME);
             app.manage(settings::SettingsState::load(path));
+            let themes_path = app.path().app_config_dir()?.join(themes::store::FILE_NAME);
+            app.manage(themes::ThemesState::load(themes_path));
             Ok(())
         })
         .register_asynchronous_uri_scheme_protocol(rich_text::PROXY_SCHEME, |ctx, request, responder| {
@@ -63,6 +66,10 @@ pub fn run() {
             queries::list_iterations,
             queries::list_work_item_types,
             queries::list_team_members,
+            themes::search_theme_extensions,
+            themes::import_theme_extension,
+            themes::list_imported_themes,
+            themes::remove_imported_theme,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
