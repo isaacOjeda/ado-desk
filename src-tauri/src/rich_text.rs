@@ -53,12 +53,27 @@ pub fn proxied_attachment_url(src: &str, organization: &str) -> Option<String> {
     Some(proxied)
 }
 
-/// Accepts `.../_apis/.../attachments/...` paths only (work item and PR attachments).
+/// Accepts only the two attachment shapes Azure DevOps produces (relative to the org):
+/// `[project/]_apis/wit/attachments/{id}` and
+/// `[project/]_apis/git/repositories/{repo}/pullRequests/{id}/attachments/{name}`.
+/// Dot segments and encoded separators are rejected so nothing can be re-targeted upstream.
 pub fn is_attachment_path(segments: &[&str]) -> bool {
-    let apis = segments.iter().position(|s| *s == "_apis");
-    let attachments = segments.iter().rposition(|s| s.eq_ignore_ascii_case("attachments"));
-    matches!((apis, attachments), (Some(a), Some(b)) if a < b && b + 1 < segments.len())
-        && segments.iter().all(|s| *s != ".." && *s != ".")
+    let safe = segments.iter().all(|s| {
+        let lower = s.to_ascii_lowercase();
+        !s.is_empty() && *s != "." && *s != ".." && !lower.contains("%2f") && !lower.contains("%5c") && !lower.contains("%2e")
+    });
+    let Some(apis) = segments.iter().position(|s| *s == "_apis") else {
+        return false;
+    };
+    if !safe || apis > 1 {
+        return false;
+    }
+    let lower: Vec<String> = segments[apis + 1..].iter().map(|s| s.to_ascii_lowercase()).collect();
+    let tail: Vec<&str> = lower.iter().map(String::as_str).collect();
+    matches!(
+        tail.as_slice(),
+        ["wit", "attachments", _] | ["git", "repositories", _, "pullrequests", _, "attachments", _]
+    )
 }
 
 fn is_proxy_url(value: &str) -> bool {
@@ -69,8 +84,9 @@ fn is_proxy_url(value: &str) -> bool {
 /// Sanitizes untrusted HTML and rewrites attachment images of `organization`.
 pub fn sanitize_html(html: &str, organization: &str) -> String {
     let organization = organization.to_string();
-    let mut schemes: HashSet<&str> = ["http", "https", "mailto"].into_iter().collect();
-    schemes.insert(PROXY_SCHEME);
+    // The proxy scheme is deliberately NOT allowed: ammonia validates schemes before the
+    // attribute filter, so only our own rewritten `src` values can carry it.
+    let schemes: HashSet<&str> = ["http", "https", "mailto"].into_iter().collect();
 
     ammonia::Builder::default()
         .url_schemes(schemes)
@@ -169,6 +185,28 @@ mod tests {
         let clean = sanitize_html(html, "contoso");
 
         assert!(!clean.contains("adoimg"), "{clean}");
+    }
+
+    #[test]
+    fn drops_proxy_urls_obfuscated_with_whitespace() {
+        let html = "<img src=\"ado&#9;img://localhost/contoso/p/_apis/wit/attachments/1\"><img src=\"ado\nimg://localhost/x\">";
+
+        let clean = sanitize_html(html, "contoso");
+
+        assert!(!clean.contains("img://"), "{clean}");
+    }
+
+    #[test]
+    fn attachment_paths_accept_only_work_item_and_pull_request_shapes() {
+        let ok = |p: &str| is_attachment_path(&p.split('/').collect::<Vec<_>>());
+        assert!(ok("proj/_apis/wit/attachments/1234"));
+        assert!(ok("_apis/wit/attachments/1234"));
+        assert!(ok("proj/_apis/git/repositories/r1/pullRequests/7/attachments/shot.png"));
+        assert!(!ok("_apis/projects/attachments/x"));
+        assert!(!ok("a/b/_apis/wit/attachments/1"));
+        assert!(!ok("proj/_apis/wit/attachments/x%2F..%2F..%2F_apis%2Fprojects"));
+        assert!(!ok("proj/_apis/wit/attachments/x%5Cy"));
+        assert!(!ok("proj/_apis/wit/attachments"));
     }
 
     #[test]
