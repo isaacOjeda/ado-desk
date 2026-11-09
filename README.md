@@ -14,6 +14,17 @@ To install a release build locally (macOS), run `pnpm app:install`. It builds `A
 quits a running copy, replaces `/Applications/ADO Desk.app` and opens it (`--no-open` skips the last step).
 On first launch, choose "Always Allow" when macOS asks for keychain access.
 
+## Release
+
+`.github/workflows/release.yml` builds installers for macOS (Apple Silicon and Intel, `.dmg`) and
+Windows (x64, NSIS `.exe`).
+
+- Run it by hand from the Actions tab to build only; the installers are attached to the run as artifacts.
+- Push a tag to publish: bump `version` in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` and
+  `package.json`, commit, then `git tag v<version> && git push origin v<version>`. The workflow checks
+  that the tag matches `tauri.conf.json` and creates a **draft** release with the installers and
+  `.github/release-notes.md`; review it and publish it from GitHub.
+
 ## Sign in
 
 Create a [personal access token](https://learn.microsoft.com/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate)
