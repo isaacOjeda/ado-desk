@@ -1,6 +1,6 @@
 // Shortcuts settings: the global shortcut that opens the floating search bar. Rust validates
 // and registers it; an invalid or taken combination comes back as a save error.
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { settingsApi, type SearchSettings, type Settings } from "../../lib/settings";
 import "./appearance.css";
 
@@ -66,25 +66,50 @@ export function ShortcutsSection({ settings, onChange }: Props) {
   }, [search.globalShortcut, search.globalShortcutEnabled]);
   const update = (patch: Partial<SearchSettings>) => onChange({ ...settings, search: { ...search, ...patch } });
 
-  const record = (event: KeyboardEvent<HTMLButtonElement>) => {
+  const recorderRef = useRef<HTMLButtonElement>(null);
+  const searchRef = useRef(search);
+  searchRef.current = search;
+  const updateRef = useRef(update);
+  updateRef.current = update;
+
+  // WebKit (the macOS webview) does not focus a button on click, so key presses never reach the
+  // button itself. While recording, listen on the whole window instead (capture phase, so no other
+  // handler sees the keys) and stop when the window loses focus or the user clicks elsewhere.
+  useEffect(() => {
     if (!recording) return;
-    event.preventDefault();
-    event.stopPropagation();
-    if (event.key === "Escape" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+    const stop = () => {
       setRecording(false);
       setHint(null);
-      return;
-    }
-    const accelerator = acceleratorOf(event);
-    if (!accelerator) return;
-    if (!hasCommandModifier(accelerator)) {
-      setHint(`Add ${MAC ? "⌘, ⌃ or ⌥" : "Ctrl, Alt or Win"} so the shortcut does not catch normal typing.`);
-      return;
-    }
-    setRecording(false);
-    setHint(null);
-    if (accelerator !== search.globalShortcut) update({ globalShortcut: accelerator });
-  };
+    };
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === "Escape" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        stop();
+        return;
+      }
+      const accelerator = acceleratorOf(event);
+      if (!accelerator) return;
+      if (!hasCommandModifier(accelerator)) {
+        setHint(`Add ${MAC ? "⌘, ⌃ or ⌥" : "Ctrl, Alt or Win"} so the shortcut does not catch normal typing.`);
+        return;
+      }
+      stop();
+      if (accelerator !== searchRef.current.globalShortcut) updateRef.current({ globalShortcut: accelerator });
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      if (!recorderRef.current?.contains(event.target as Node)) stop();
+    };
+    recorderRef.current?.focus();
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("blur", stop);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("blur", stop);
+    };
+  }, [recording]);
 
   return (
     <div className="appearance">
@@ -143,13 +168,12 @@ export function ShortcutsSection({ settings, onChange }: Props) {
           type="button"
           className={`btn btn-sm shortcut-recorder${recording ? " is-recording" : ""}`}
           aria-labelledby="shortcut-keys"
+          ref={recorderRef}
           disabled={!search.globalShortcutEnabled}
           onClick={() => {
             setRecording(true);
             setHint(null);
           }}
-          onKeyDown={record}
-          onBlur={() => setRecording(false)}
         >
           {recording ? "Recording…" : <kbd>{shortcutLabel(search.globalShortcut)}</kbd>}
         </button>
