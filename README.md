@@ -10,6 +10,10 @@ pnpm install
 pnpm tauri dev      # first build compiles the Rust side and takes a few minutes
 ```
 
+To install a release build locally (macOS), run `pnpm app:install`. It builds `ADO Desk.app`,
+quits a running copy, replaces `/Applications/ADO Desk.app` and opens it (`--no-open` skips the last step).
+On first launch, choose "Always Allow" when macOS asks for keychain access.
+
 ## Sign in
 
 Create a [personal access token](https://learn.microsoft.com/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate)
