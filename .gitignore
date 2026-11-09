@@ -28,3 +28,6 @@ src-tauri/target
 
 # Agent worktrees
 .claude/
+
+# Local skill registry (machine-specific)
+.atl/
