@@ -3,6 +3,23 @@
 Proof of concept: a desktop app (Tauri 2 + React + TypeScript) that shows your Azure Boards
 work items and Azure Repos pull requests.
 
+![Work items assigned to you, with project, sprint, type and state filters](docs/screenshots/work-items.png)
+
+## Screenshots
+
+The organization, projects, people and items shown are fictional.
+
+| | |
+|---|---|
+| ![Work item detail with repro steps, discussion, details and related work](docs/screenshots/work-item.png) | ![Pull request overview with description, threads, reviewers and linked work items](docs/screenshots/pull-request.png) |
+| **Work item**: description, repro steps, discussion, fields and related work. | **Pull request**: description, comment threads, reviewers and linked work items. |
+| ![Pull request files tab with an inline diff and its comment thread](docs/screenshots/pull-request-files.png) | ![Quick search palette matching work items and pull requests](docs/screenshots/quick-search.png) |
+| **Files**: changed files with the diff and its comments inline. | **Quick search** (⌘K): work items and pull requests across organizations. |
+
+![Pull request list in a light theme](docs/screenshots/pull-requests-light.png)
+
+Light and dark themes follow the system or can be picked in Settings, including themes imported from Open VSX.
+
 ## Run
 
 ```bash
@@ -16,6 +33,17 @@ On first launch, choose "Always Allow" when macOS asks for keychain access.
 
 On Windows, run `pnpm tauri build` (requires the Visual Studio C++ Build Tools and Rust with the MSVC
 toolchain) and run the installer from `src-tauri/target/release/bundle/nsis/` or `bundle/msi/`.
+
+## Release
+
+`.github/workflows/release.yml` builds installers for macOS (Apple Silicon and Intel, `.dmg`) and
+Windows (x64, NSIS `.exe`).
+
+- Run it by hand from the Actions tab to build only; the installers are attached to the run as artifacts.
+- Push a tag to publish: bump `version` in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` and
+  `package.json`, commit, then `git tag v<version> && git push origin v<version>`. The workflow checks
+  that the tag matches `tauri.conf.json` and creates a **draft** release with the installers and
+  `.github/release-notes.md`; review it and publish it from GitHub.
 
 ## Sign in
 
