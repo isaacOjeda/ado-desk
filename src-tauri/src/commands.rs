@@ -325,12 +325,14 @@ pub async fn update_settings(
     if !crate::search_bar::is_valid_shortcut(&settings.search.global_shortcut) {
         return Err(crate::search_bar::INVALID_SHORTCUT.into());
     }
-    let settings = settings::normalize(settings);
+    let mut settings = settings::normalize(settings);
     {
         // Serializes updates from every window. The settings lock itself is never held while
         // the shortcut plugin waits on the main thread, where `get_settings` takes it.
         let _update = state.updates.lock().unwrap_or_else(|e| e.into_inner());
         let previous = state.current();
+        // Views only change through `views::save_view` and `views::delete_view`.
+        settings = crate::views::with_stored_views(settings, &previous);
         // Only a real change clears a startup problem: an unchanged shortcut registers nothing.
         if crate::search_bar::sync_shortcut(&app, Some(&previous.search), &settings.search)? {
             crate::search_bar::set_shortcut_problem(None);

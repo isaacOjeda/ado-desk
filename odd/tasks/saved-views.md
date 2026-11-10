@@ -1,0 +1,23 @@
+# Feature: saved views
+Objective: roadmap phase 4. Save the current filters of a list as a named view, listed in the sidebar and applied in one click.
+Branch: feat/saved-views · Delivery: single-pr (forecast ~500 authored lines in two work-unit commits: Rust store, then UI) · Test runner: `cargo test` (src-tauri), `pnpm exec tsc --noEmit`, `pnpm build`.
+
+## Specs
+- S1 Roadmap phase 4 (verbatim): "Save the current filter set of a list as a named view ("My sprint", "PRs waiting for my review"); views appear in the sidebar." "Built on `usePersistentFilter`; stored in settings (shape change mirrored in `settings.rs` and `src/lib/settings.ts`, with loading that tolerates the old shape)." "Built-in starter views that can be removed." "Done when: a view survives a restart, applies its filters in one click, and an old settings file still loads."
+- S2 Scope (user decision, L2): "Per organization (Recommended)": a saved view shows in the sidebar only while its organization is active. Built-in starters (no project) show in every organization.
+- S3 (assumption) Storage: `settings.json` gains `views`, a list of `{ id, name, organization (lowercase, or null for starters), scope ("workItems" | "pullRequests"), filter }`. The filter is stored as opaque JSON and validated by the frontend parsers when applied (same rule as the filters kept in `localStorage`). Rust validates the envelope: Rust-generated id, name 1 to 60 characters without control characters, at most 50 views, filter a JSON object of at most 4 KB.
+- S4 (assumption) Tolerant loading: a file without `views` loads the starters; an explicit empty list stays empty; a malformed view is dropped without resetting any other setting or view; a `views` value of the wrong type loads the starters.
+- S5 (assumption) Writes: only the new `save_view` and `delete_view` commands change views (serialized with other settings updates, persisted, broadcast through `settings-changed`). `update_settings` keeps the stored views, so a window holding a stale or default copy never erases them. Error messages never echo the view name.
+- S6 (assumption) Starters, removable like any view: "Waiting for my review" (pull requests: active, role reviewing) and "My closed work items" (work items: assigned to me, closed). "My sprint" is not a starter: the current sprint needs a project, which a starter cannot name.
+- S7 (assumption) UI: a "Save view" action in each filter bar asks for a name inline (Enter saves, Esc cancels). The sidebar lists the active organization's views under "Views"; clicking one switches to its list and applies its filters (through the existing persistent filter); the view whose filters equal the current ones is highlighted; each view has a remove button.
+
+## Tasks
+- T1 [S3, S4, S5, S6] Rust: `views.rs` (types, starters, lenient deserialization, validation, `save_view` / `delete_view`), `Settings.views`, `update_settings` keeps stored views. Route: inline (the UI depends on this contract, so units are not independent). Risk: item 1 (persisted settings format). Status: done, see L4.
+- T2 [S1, S2, S6, S7] Frontend: settings contract, views model, sidebar Views section, Save view in filter bars, apply/highlight/remove. Route: inline. Risk: none expected. Status: pending.
+- T3 [S1-S7] Independent verifier (item 1), real app check. Status: pending.
+
+## Log
+- L1 (2026-11-10) "del roadmap, qué hemos hecho y qué sigue?" -> recommended phase 4; user: "sí, vamos".
+- L2 (2026-11-10) Question: per-organization or shared views. Answer: "Per organization (Recommended)".
+- L3 Evidence: filters are per organization in `localStorage` (`usePersistentFilter`, `storageKey`); `normalizeWorkItemFilter` forces `iteration: any` without a project (so no project-less "My sprint"); Rust `Assignee::Person` has no `displayName`, so filters are stored as opaque JSON to keep it; `settings::load` is all-or-nothing, so views deserialize leniently; `SettingsApp` sends its whole local copy on every change, hence dedicated view commands.
+- L4 T1: `views.rs` (`Views` newtype: `Default` = starters, lenient `Deserialize` that drops invalid entries, duplicate ids and anything past 50; `add` / `remove` / `with_stored_views`; async `save_view` / `delete_view` under the `updates` gate, then save + `settings-changed`); `Settings.views`; `update_settings` keeps the stored views. RED 12/13 (`todo!` stubs; the starters-default test passed since `Default` was written first) then GREEN 13/13 plus `saved_views_survive_a_save_and_load`; `defaults_match_the_frontend_contract` now includes the starters. cargo test 199 + 5 ok, clippy clean.

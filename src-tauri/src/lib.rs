@@ -12,6 +12,7 @@ mod search;
 mod search_bar;
 mod settings;
 mod themes;
+mod views;
 mod work_items;
 
 use std::sync::RwLock;
@@ -116,6 +117,8 @@ pub fn run() {
             themes::import_theme_extension,
             themes::list_imported_themes,
             themes::remove_imported_theme,
+            views::save_view,
+            views::delete_view,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -98,6 +98,8 @@ pub struct Settings {
     pub appearance: AppearanceSettings,
     pub search: SearchSettings,
     pub notifications: NotificationSettings,
+    /// Changed only through `views::save_view` / `views::delete_view`; loaded leniently.
+    pub views: crate::views::Views,
 }
 
 /// Loaded settings plus where they live, managed by Tauri.
@@ -290,9 +292,52 @@ mod tests {
             serde_json::json!({
                 "appearance": { "mode": "system", "lightTheme": "paper", "darkTheme": "graphite", "translucency": true, "glassIntensity": 50 },
                 "search": { "globalShortcutEnabled": true, "globalShortcut": "CommandOrControl+Shift+Space" },
-                "notifications": { "enabled": true, "intervalMinutes": 5, "reviewRequests": true, "assignments": true, "comments": true }
+                "notifications": { "enabled": true, "intervalMinutes": 5, "reviewRequests": true, "assignments": true, "comments": true },
+                "views": [
+                    {
+                        "id": "starter-review",
+                        "name": "Waiting for my review",
+                        "organization": null,
+                        "scope": "pullRequests",
+                        "filter": { "project": null, "status": "active", "role": "reviewing" }
+                    },
+                    {
+                        "id": "starter-closed",
+                        "name": "My closed work items",
+                        "organization": null,
+                        "scope": "workItems",
+                        "filter": {
+                            "project": null,
+                            "assignee": { "kind": "me" },
+                            "iteration": { "kind": "any" },
+                            "types": [],
+                            "state": "closed"
+                        }
+                    }
+                ]
             })
         );
+    }
+
+    #[test]
+    fn saved_views_survive_a_save_and_load() {
+        let scratch = Scratch::new("views");
+        let path = scratch.0.join(FILE_NAME);
+        let mut settings = Settings::default();
+        settings.views = crate::views::add(
+            &settings.views,
+            "contoso",
+            crate::views::ViewScope::WorkItems,
+            "My sprint",
+            serde_json::json!({ "project": "Web", "iteration": { "kind": "current" } }),
+            "view-1".into(),
+        )
+        .unwrap();
+
+        save(&path, &settings).unwrap();
+
+        assert_eq!(load(&path), settings);
+        assert_eq!(load(&path).views.0.len(), 3);
     }
 
     #[test]
