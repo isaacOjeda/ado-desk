@@ -449,6 +449,28 @@ mod tests {
         }
     }
 
+    /// Every status a write can get: never `Unauthorized`/`Forbidden` (no sign-out), and only
+    /// fixed text in the message.
+    #[test]
+    fn write_status_error_sweep_never_signs_out_or_echoes() {
+        for code in 100u16..600 {
+            let Ok(status) = StatusCode::from_u16(code) else { continue };
+            match write_status_error(status) {
+                None => assert!((200..300).contains(&code) && code != 203, "{code} accepted"),
+                Some(AppError::WriteDenied) => {
+                    assert!(matches!(code, 401 | 403 | 203 | 300..=399), "{code} denied")
+                }
+                Some(AppError::WriteRejected) => assert!(matches!(code, 400 | 409 | 412), "{code}"),
+                Some(AppError::NotFound) => assert_eq!(code, 404),
+                Some(AppError::Api { status, message }) => {
+                    assert_eq!(status, code);
+                    assert_eq!(message, "the change was not saved");
+                }
+                Some(other) => panic!("{code}: unexpected {other:?}"),
+            }
+        }
+    }
+
     #[test]
     fn api_message_prefers_json_message() {
         assert_eq!(

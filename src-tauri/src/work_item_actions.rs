@@ -103,10 +103,26 @@ pub fn validate_assignee(
         ))
 }
 
+/// The error of a read made before a write (states, team members), without server text: the
+/// failure of a write command must not quote Azure DevOps. Other errors pass through.
+pub fn pre_read_error(err: AppError) -> AppError {
+    const MESSAGE: &str = "could not read the work item's options";
+    match err {
+        AppError::Api { status, .. } => AppError::Api {
+            status,
+            message: MESSAGE.into(),
+        },
+        AppError::Decode(_) => AppError::Decode(MESSAGE.into()),
+        other => other,
+    }
+}
+
 /// A work item type name as received from the webview.
 pub fn validate_type(work_item_type: &str) -> AppResult<String> {
     let trimmed = work_item_type.trim();
+    // `.` and `..` would be dropped from the URL path instead of failing.
     let valid = !trimmed.is_empty()
+        && trimmed.chars().any(|c| c != '.')
         && trimmed.chars().count() <= MAX_NAME_CHARS
         && !work_item_type
             .chars()
@@ -269,7 +285,9 @@ pub async fn set_work_item_state(
     let project = valid_project(&project)?;
     let work_item_type = validate_type(&work_item_type)?;
     let id = valid_id(id)?;
-    let states = type_states(&client, &project, &work_item_type).await?;
+    let states = type_states(&client, &project, &work_item_type)
+        .await
+        .map_err(pre_read_error)?;
     let value = validate_state(&value, &states)?;
     let patch = field_patch(rev, "/fields/System.State", &value)?;
     let url = client.url(&[&project, "_apis", "wit", "workitems", &id]);
@@ -290,7 +308,9 @@ pub async fn set_work_item_assignee(
     let members = match assignee.as_deref().map(str::trim) {
         // Unassigning needs no lookup.
         None | Some("") => Vec::new(),
-        Some(_) => queries::default_team_members(&client, &project).await?,
+        Some(_) => queries::default_team_members(&client, &project)
+            .await
+            .map_err(pre_read_error)?,
     };
     let value = validate_assignee(
         assignee.as_deref(),
@@ -452,6 +472,31 @@ mod tests {
     }
 
     #[test]
+    fn pre_read_error_drops_server_text() {
+        let api = pre_read_error(AppError::Api {
+            status: 500,
+            message: "TF1: secret detail".into(),
+        });
+        assert_eq!(
+            api.to_string(),
+            "Azure DevOps returned HTTP 500: could not read the work item's options"
+        );
+        let decode = pre_read_error(AppError::Decode("invalid type: string \"x\"".into()));
+        assert_eq!(
+            decode.to_string(),
+            "Unexpected response from Azure DevOps: could not read the work item's options"
+        );
+        assert!(matches!(
+            pre_read_error(AppError::NotFound),
+            AppError::NotFound
+        ));
+        assert!(matches!(
+            pre_read_error(AppError::Forbidden),
+            AppError::Forbidden
+        ));
+    }
+
+    #[test]
     fn remembered_access_grants_on_success_and_forgets_on_denial() {
         use WriteAccess::{Granted, Unknown};
         assert_eq!(remembered_access(Unknown, &Ok(())), Granted);
@@ -485,5 +530,192 @@ mod tests {
         assert!(shows_actions(&Err(AppError::WriteRejected)));
         assert!(shows_actions(&Err(AppError::NotFound)));
         assert!(shows_actions(&Err(AppError::Network("timeout".into()))));
+    }
+}
+
+#[cfg(test)]
+mod verifier_probes {
+    use super::*;
+    use crate::azdo::model::build_url;
+
+    fn member(display: &str, unique: &str) -> TeamMember {
+        TeamMember {
+            display_name: display.into(),
+            unique_name: unique.into(),
+        }
+    }
+
+    #[test]
+    fn probe_write_errors_serialize_fixed_text() {
+        for (err, kind) in [
+            (AppError::WriteDenied, "writeDenied"),
+            (AppError::WriteRejected, "writeRejected"),
+            (AppError::InvalidChange("Unknown project"), "invalidChange"),
+        ] {
+            let json = serde_json::to_value(&err).unwrap();
+            assert_eq!(json["kind"], kind);
+            assert!(!json["message"].as_str().unwrap().is_empty());
+        }
+    }
+
+    /// No crafted value is echoed back in a validation error.
+    #[test]
+    fn probe_validation_errors_never_echo_input() {
+        let secret = "SECRETPAT0123456789abcdef";
+        let members = vec![member("Ana", "ana@contoso.com")];
+        let errors = [
+            validate_state(secret, &["New".into()]).unwrap_err(),
+            validate_assignee(Some(secret), &members, Some("me@contoso.com")).unwrap_err(),
+            validate_type(&format!("{secret}\n")).unwrap_err(),
+            comment_html(&secret.repeat(400)).unwrap_err(),
+            valid_project(&format!("{secret}/x")).unwrap_err(),
+        ];
+        for err in errors {
+            assert!(!err.to_string().contains(secret), "{err}");
+            assert!(!serde_json::to_string(&err).unwrap().contains(secret));
+        }
+    }
+
+    /// Escaped comments never carry markup: only `<br>` tags remain and no raw `<`, `>` or `"`.
+    #[test]
+    fn probe_comment_html_never_carries_markup() {
+        for input in [
+            "<script>alert(1)</script>",
+            "<img src=x onerror=alert(1)>",
+            "&lt;b&gt; already escaped",
+            "a\r\nb\rc\u{2028}d\u{0085}e",
+            "<a href=\"javascript:alert(1)\">x</a>\n<br>",
+            "line1\n\n\nline2",
+            "]]><!--",
+        ] {
+            let html = comment_html(input).unwrap();
+            let without_br = html.replace("<br>", "");
+            assert!(
+                !without_br.contains('<') && !without_br.contains('>'),
+                "{input:?} -> {html}"
+            );
+            assert!(
+                !without_br.contains('"') && !without_br.contains('\''),
+                "{html}"
+            );
+        }
+        assert_eq!(comment_html("&lt;").unwrap(), "&amp;lt;");
+        // CR is dropped and LF kept; LINE SEPARATOR and NEL are removed.
+        assert_eq!(
+            comment_html("a\r\nb\rc\u{2028}d\u{0085}e").unwrap(),
+            "a<br>bcde"
+        );
+        // Interior blank lines are kept as line breaks.
+        assert_eq!(comment_html("a\n\nb").unwrap(), "a<br><br>b");
+    }
+
+    /// The length bound counts the cleaned text, not stripped characters.
+    #[test]
+    fn probe_comment_length_counts_cleaned_text() {
+        let padded = format!("{}{}", "x".repeat(MAX_COMMENT_CHARS), "\u{200B}".repeat(10));
+        assert!(comment_html(&padded).is_ok());
+        let crlf = "x\r\n".repeat(MAX_COMMENT_CHARS / 2);
+        assert!(comment_html(&crlf).is_ok(), "CR not counted");
+    }
+
+    #[test]
+    fn probe_state_comes_from_the_type_list_only() {
+        let states = vec!["New".to_string(), "Active".into()];
+        assert_eq!(validate_state("Active\n", &states).unwrap(), "Active");
+        assert!(validate_state("Active\u{202E}", &states).is_err());
+        assert!(validate_state("Active", &[]).is_err());
+        assert!(validate_state("<b>Active</b>", &states).is_err());
+    }
+
+    #[test]
+    fn probe_assignee_comes_from_team_or_me_only() {
+        let members = vec![member("Ana", "ana@contoso.com")];
+        // Nobody to choose from: only unassigning passes.
+        assert!(validate_assignee(Some("ana@contoso.com"), &[], None).is_err());
+        assert_eq!(validate_assignee(Some(""), &[], None).unwrap(), "");
+        assert!(validate_assignee(Some("ana@contoso.com\u{202E}"), &members, None).is_err());
+        assert!(
+            validate_assignee(Some("Ana"), &members, None).is_err(),
+            "display name is not accepted"
+        );
+        assert!(validate_assignee(Some("ana@contoso.com.evil"), &members, None).is_err());
+    }
+
+    /// State and assignee patches always test the revision first; the probe only tests it.
+    #[test]
+    fn probe_patches_always_test_the_revision() {
+        for rev in [1, 2, i64::MAX] {
+            for field in ["/fields/System.State", "/fields/System.AssignedTo"] {
+                let patch = field_patch(rev, field, "v").unwrap();
+                let ops = patch.as_array().unwrap();
+                assert_eq!(ops.len(), 2);
+                assert_eq!(
+                    ops[0],
+                    json!({ "op": "test", "path": "/rev", "value": rev })
+                );
+                assert_eq!(ops[1]["path"], field);
+            }
+            let probe = probe_patch(rev).unwrap();
+            assert_eq!(
+                probe,
+                json!([{ "op": "test", "path": "/rev", "value": rev }])
+            );
+        }
+        for rev in [0, -1, i64::MIN] {
+            assert!(field_patch(rev, "/fields/System.State", "v").is_err());
+            assert!(probe_patch(rev).is_err());
+        }
+        assert!(valid_id(0).is_err() && valid_id(-5).is_err());
+        assert_eq!(valid_id(42).unwrap(), "42");
+    }
+
+    #[test]
+    fn probe_project_rejects_path_tricks() {
+        for bad in [
+            "..", ".", "_apis", "a/b", "a\\b", "a?b", "a#b", "", " ", "p\n",
+        ] {
+            assert!(valid_project(bad).is_err(), "{bad:?}");
+        }
+    }
+
+    /// A crafted work item type stays inside the active organization and project. `..` passes
+    /// validation and the url crate drops it (`.../workitemtypes/states`): a GET in the same
+    /// project, never a write, since the PATCH URL does not carry the type.
+    #[test]
+    fn probe_type_segment_stays_in_org_and_project() {
+        let path = |t: &str| {
+            let t = validate_type(t).unwrap();
+            build_url(&[
+                "contoso",
+                "proj",
+                "_apis",
+                "wit",
+                "workitemtypes",
+                &t,
+                "states",
+            ])
+        };
+        for dots in [".", ".."] {
+            assert!(matches!(
+                validate_type(dots),
+                Err(AppError::InvalidChange("Unknown work item type"))
+            ));
+        }
+        for (crafted, segment) in [
+            ("%2e%2e", "%252e%252e"),
+            ("a/b", "a%2Fb"),
+            ("a\\b", "a%5Cb"),
+            ("a?b#c", "a%3Fb%23c"),
+            ("../../other", "..%2F..%2Fother"),
+        ] {
+            let url = path(crafted);
+            assert_eq!(url.host_str(), Some("dev.azure.com"));
+            assert_eq!(
+                url.path(),
+                format!("/contoso/proj/_apis/wit/workitemtypes/{segment}/states"),
+                "{crafted}"
+            );
+            assert!(url.query().is_none() && url.fragment().is_none());
+        }
     }
 }
