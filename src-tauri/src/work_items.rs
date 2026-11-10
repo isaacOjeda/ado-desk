@@ -21,6 +21,8 @@ use crate::rich_text;
 #[serde(rename_all = "camelCase")]
 pub struct WorkItemDetail {
     pub id: i64,
+    /// Revision loaded; writes test it so a change made elsewhere is not overwritten.
+    pub rev: i64,
     pub title: String,
     pub work_item_type: String,
     pub state: String,
@@ -107,6 +109,8 @@ pub struct WorkItemComment {
 #[serde(rename_all = "camelCase")]
 pub struct RawWorkItemDetail {
     pub id: i64,
+    #[serde(default)]
+    pub rev: i64,
     #[serde(default)]
     pub fields: Map<String, Value>,
     #[serde(default)]
@@ -435,6 +439,7 @@ pub fn map_detail(organization: &str, raw: RawWorkItemDetail, linked: &[RawWorkI
 
     WorkItemDetail {
         id: raw.id,
+        rev: raw.rev,
         title: text("System.Title").unwrap_or_default(),
         work_item_type: text("System.WorkItemType").unwrap_or_default(),
         state: text("System.State").unwrap_or_default(),
@@ -642,6 +647,7 @@ mod tests {
     fn maps_scalar_fields_identities_and_tags() {
         let raw = raw_detail(json!({
             "id": 42,
+            "rev": 9,
             "fields": {
                 "System.Title": "Login fails",
                 "System.WorkItemType": "Bug",
@@ -665,6 +671,7 @@ mod tests {
         }));
 
         let item = map_detail(ORG, raw, &[]);
+        assert_eq!(item.rev, 9);
 
         assert_eq!(item.id, 42);
         assert_eq!(item.title, "Login fails");

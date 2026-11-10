@@ -14,7 +14,7 @@ use crate::AppState;
 use crate::azdo::AzdoClient;
 use crate::azdo::model::{self, ListResponse, PullRequest, WorkItem};
 use crate::commands::current_client;
-use crate::error::AppError;
+use crate::error::{AppError, AppResult};
 
 /// Longest value accepted inside a WIQL string literal.
 pub const MAX_LITERAL_LEN: usize = 256;
@@ -620,14 +620,20 @@ pub async fn list_team_members(
 ) -> QueryResult<Vec<TeamMember>> {
     let client = current_client(&state)?;
     let project = validate_project(&project)?;
+    Ok(default_team_members(&client, &project).await?)
+}
+
+/// Members of the default team of `project` (already validated). Also the assignee
+/// candidates that work item actions accept.
+pub(crate) async fn default_team_members(client: &AzdoClient, project: &str) -> AppResult<Vec<TeamMember>> {
     let detail: RawProjectDetail = client
-        .get_json(client.url(&["_apis", "projects", &project]))
+        .get_json(client.url(&["_apis", "projects", project]))
         .await?;
     let Some(team) = detail.default_team else {
         return Ok(Vec::new());
     };
 
-    let mut url = client.url(&["_apis", "projects", &project, "teams", &team.id, "members"]);
+    let mut url = client.url(&["_apis", "projects", project, "teams", &team.id, "members"]);
     url.query_pairs_mut().append_pair("$top", TEAM_MEMBERS_PAGE);
     let members: ListResponse<RawTeamMember> = client.get_json(url).await?;
     Ok(map_team_members(members.value))

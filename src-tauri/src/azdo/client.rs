@@ -1,7 +1,9 @@
 //! Thin HTTP adapter over the Azure DevOps REST API (api-version 7.1).
 
 use futures::{FutureExt, StreamExt, future::BoxFuture, stream};
-use reqwest::{RequestBuilder, StatusCode, header::HeaderMap, redirect};
+use std::sync::Mutex;
+
+use reqwest::{Method, RequestBuilder, StatusCode, header::{CONTENT_TYPE, HeaderMap}, redirect};
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use url::Url;
@@ -28,6 +30,16 @@ pub struct AzdoClient {
     http: reqwest::Client,
     pat: String,
     session: Session,
+    /// What this token is known to allow for work item writes; reset by a new token (client).
+    work_write: Mutex<WriteAccess>,
+}
+
+/// Whether the token can write, as learned from Azure DevOps answers during this session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WriteAccess {
+    Unknown,
+    Granted,
+    Denied,
 }
 
 impl AzdoClient {
@@ -55,6 +67,7 @@ impl AzdoClient {
             http,
             pat: pat.to_string(),
             session: model::session_from(organization, data),
+            work_write: Mutex::new(WriteAccess::Unknown),
         })
     }
 
@@ -93,6 +106,39 @@ impl AzdoClient {
     pub(crate) async fn post_json<T: DeserializeOwned>(&self, url: Url, body: &Value) -> AppResult<T> {
         let request = self.http.post(url).basic_auth("", Some(&self.pat)).json(body);
         send::<T>(request).await.map(|(value, _)| value)
+    }
+
+    pub(crate) fn work_write_access(&self) -> WriteAccess {
+        *self.work_write.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    pub(crate) fn record_work_write_access(&self, access: WriteAccess) {
+        *self.work_write.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = access;
+    }
+
+    /// Authenticated write (POST, PATCH) with a JSON body. The response body is not decoded:
+    /// once Azure DevOps accepted a change, a surprising body must not report it as failed.
+    /// Failures map through [`write_status_error`], never to `Unauthorized`.
+    pub(crate) async fn write(
+        &self,
+        method: Method,
+        url: Url,
+        body: &Value,
+        content_type: &'static str,
+    ) -> AppResult<()> {
+        let body = serde_json::to_vec(body).map_err(|err| AppError::Decode(err.to_string()))?;
+        let response = self
+            .http
+            .request(method, url)
+            .basic_auth("", Some(&self.pat))
+            .header(CONTENT_TYPE, content_type)
+            .body(body)
+            .send()
+            .await?;
+        match write_status_error(response.status()) {
+            Some(err) => Err(err),
+            None => Ok(()),
+        }
     }
 
     /// Authenticated GET returning the raw body and its content type (attachments, file blobs).
@@ -341,6 +387,33 @@ async fn send<T: DeserializeOwned>(request: RequestBuilder) -> AppResult<(T, Hea
         .map_err(|err| AppError::Decode(err.to_string()))
 }
 
+/// The error of a write answered with `status`, or `None` when the write was accepted.
+/// A token without a write scope may be answered 401 (or 203, or a redirect to sign-in) as
+/// well as 403; all of them mean "no write access" here, so a write never signs the user out.
+/// Server text is dropped: it may quote the rejected value.
+pub(crate) fn write_status_error(status: StatusCode) -> Option<AppError> {
+    let denied = status == StatusCode::UNAUTHORIZED
+        || status == StatusCode::FORBIDDEN
+        || status == StatusCode::NON_AUTHORITATIVE_INFORMATION
+        || status.is_redirection();
+    if denied {
+        return Some(AppError::WriteDenied);
+    }
+    if status.is_success() {
+        return None;
+    }
+    Some(match status {
+        StatusCode::NOT_FOUND => AppError::NotFound,
+        StatusCode::BAD_REQUEST | StatusCode::CONFLICT | StatusCode::PRECONDITION_FAILED => {
+            AppError::WriteRejected
+        }
+        _ => AppError::Api {
+            status: status.as_u16(),
+            message: "the change was not saved".into(),
+        },
+    })
+}
+
 /// Extracts `message` from an Azure DevOps error body, or a short excerpt otherwise.
 fn api_message(body: &str) -> String {
     serde_json::from_str::<Value>(body)
@@ -351,7 +424,30 @@ fn api_message(body: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::api_message;
+    use super::{StatusCode, api_message, write_status_error};
+    use crate::error::AppError;
+
+    #[test]
+    fn write_status_error_never_signs_out() {
+        for code in [401, 403, 203, 302, 307] {
+            let status = StatusCode::from_u16(code).unwrap();
+            assert!(matches!(write_status_error(status), Some(AppError::WriteDenied)), "{code}");
+        }
+    }
+
+    #[test]
+    fn write_status_error_maps_rejections_to_fixed_text() {
+        for code in [400, 409, 412] {
+            let status = StatusCode::from_u16(code).unwrap();
+            assert!(matches!(write_status_error(status), Some(AppError::WriteRejected)), "{code}");
+        }
+        assert!(matches!(write_status_error(StatusCode::NOT_FOUND), Some(AppError::NotFound)));
+        let server = write_status_error(StatusCode::INTERNAL_SERVER_ERROR).unwrap();
+        assert_eq!(server.to_string(), "Azure DevOps returned HTTP 500: the change was not saved");
+        for code in [200, 201, 204] {
+            assert!(write_status_error(StatusCode::from_u16(code).unwrap()).is_none(), "{code}");
+        }
+    }
 
     #[test]
     fn api_message_prefers_json_message() {

@@ -14,6 +14,7 @@ mod search_bar;
 mod settings;
 mod themes;
 mod views;
+mod work_item_actions;
 mod work_items;
 
 use std::sync::RwLock;
@@ -96,6 +97,11 @@ pub fn run() {
             commands::list_pull_requests,
             work_items::get_work_item,
             work_items::list_work_item_comments,
+            work_item_actions::work_item_write_access,
+            work_item_actions::list_work_item_states,
+            work_item_actions::set_work_item_state,
+            work_item_actions::set_work_item_assignee,
+            work_item_actions::add_work_item_comment,
             pull_requests::get_pull_request,
             pull_requests::list_pull_request_threads,
             pull_requests::list_pull_request_files,
