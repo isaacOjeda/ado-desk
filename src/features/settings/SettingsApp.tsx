@@ -14,7 +14,7 @@ const SECTIONS: { id: Section; label: string; icon: string }[] = [
   { id: "profile", label: "Profile", icon: "◉" },
   { id: "appearance", label: "Appearance", icon: "◐" },
   { id: "notifications", label: "Notifications", icon: "◎" },
-  { id: "shortcuts", label: "Shortcuts", icon: "⌘" },
+  { id: "shortcuts", label: "Shortcuts", icon: "⌨" },
 ];
 
 function message(err: unknown): string {

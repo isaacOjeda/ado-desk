@@ -31,6 +31,9 @@ To install a release build locally (macOS), run `pnpm app:install`. It builds `A
 quits a running copy, replaces `/Applications/ADO Desk.app` and opens it (`--no-open` skips the last step).
 On first launch, choose "Always Allow" when macOS asks for keychain access.
 
+On Windows, run `pnpm tauri build` (requires the Visual Studio C++ Build Tools and Rust with the MSVC
+toolchain) and run the installer from `src-tauri/target/release/bundle/nsis/` or `bundle/msi/`.
+
 ## CI
 
 `.github/workflows/ci.yml` runs on every pull request to `main` (and on pushes to `main`), on macOS and
@@ -84,7 +87,7 @@ Press **⌘K** (Ctrl+K on Windows/Linux) or click *Search* in the sidebar:
 ## Background mode
 
 Closing the main window hides it; ADO Desk keeps running behind its menu bar icon (Open ADO
-Desk, Search…, Settings…, Quit). Click the Dock icon or *Open ADO Desk* to bring the window back. Quit
+Desk, Search…, Settings…, Quit). Click the Dock icon (on Windows, left-click the tray icon) or *Open ADO Desk* to bring the window back. Quit
 from the menu bar icon or with ⌘Q.
 
 ## Global search bar
@@ -109,7 +112,8 @@ While ADO Desk runs (also with the window closed), it checks every configured or
 - new comments by others on your active pull requests and your assigned work items.
 
 New items show as native notifications (a single summary when there are more than 3) and in the
-**Inbox**, with an unread count in the sidebar, on the Dock icon and next to the menu bar icon.
+**Inbox**, with an unread count in the sidebar, on the Dock icon and next to the menu bar icon (on Windows: a red dot on the taskbar icon and the count in
+the tray tooltip).
 Desktop notifications cannot open an item when clicked, so open it from the Inbox. The first check
 of an organization only records what is already there. Seen state and the Inbox (last 100 items)
 are stored in `notification-state.json` and `inbox.json` in the app config directory; no comment
@@ -119,7 +123,7 @@ notifications differently than in the bundled app.
 ## Themes
 
 Settings > Appearance offers built-in reading themes for light and dark mode, translucency
-(macOS) and a glass slider that applies to the whole window.
+(macOS vibrancy, Mica on Windows 11) and a glass slider that applies to the whole window.
 
 **Import from Open VSX**: click *Browse themes*, search, and import a VS Code color theme
 extension. Every color theme in it is added to the Light or Dark picker (hover a card to

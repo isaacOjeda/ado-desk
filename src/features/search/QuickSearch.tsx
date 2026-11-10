@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ApiError } from "../../lib/api";
+import { MOD_KEY } from "../../lib/platform";
 import { pullRequestStatusBadge, stateTone, workItemTypeTone } from "../../lib/format";
 import { Badge, Dot, Spinner } from "../../components/ui";
 import { hitKey, searchApi, type SearchHit, type SearchResults } from "./api";
@@ -11,7 +12,6 @@ import "./search.css";
 
 const SEARCH_DELAY_MS = 350;
 const MAX_QUERY_LENGTH = 100;
-export const MOD_KEY = navigator.userAgent.includes("Mac") ? "⌘" : "Ctrl+";
 
 interface Props {
   /** The active organization; results from other organizations show their name. */

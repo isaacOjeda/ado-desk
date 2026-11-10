@@ -2,9 +2,10 @@
 // and registers it; an invalid or taken combination comes back as a save error.
 import { useEffect, useRef, useState } from "react";
 import { settingsApi, type SearchSettings, type Settings } from "../../lib/settings";
+import { IS_MAC } from "../../lib/platform";
 import "./appearance.css";
 
-const MAC = navigator.userAgent.includes("Mac");
+const MAC = IS_MAC;
 const MODIFIER_KEYS = new Set(["Meta", "Control", "Alt", "Shift", "OS"]);
 
 /** Accelerator for a key press, or null while only modifiers are held. */

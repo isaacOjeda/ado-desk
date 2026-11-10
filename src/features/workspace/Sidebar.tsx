@@ -1,7 +1,7 @@
 import type { Session } from "../../lib/api";
 import { initials } from "../../lib/format";
 import { OrgSwitcher } from "../organizations/OrgSwitcher";
-import { MOD_KEY } from "../search/QuickSearch";
+import { MOD_KEY } from "../../lib/platform";
 
 export type View = "inbox" | "workItems" | "pullRequests";
 
@@ -63,7 +63,7 @@ export function Sidebar({ session, view, counts, onSelect, onSignOut, onOpenSett
         <button
           className="btn btn-ghost btn-sm"
           onClick={onOpenSettings}
-          title="Settings (⌘,)"
+          title={`Settings (${MOD_KEY},)`}
           aria-label="Settings"
         >
           <span aria-hidden>⚙</span>

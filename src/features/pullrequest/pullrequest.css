@@ -404,7 +404,7 @@
   gap: 8px;
   max-width: min(760px, 100%);
   padding: 8px 16px 8px 112px;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   font-size: 13px;
   line-height: 1.45;
   white-space: normal;
