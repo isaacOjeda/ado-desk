@@ -75,6 +75,13 @@ pub fn install_tray(app: &AppHandle) -> tauri::Result<()> {
             }
         });
     }
+    // macOS draws menu bar icons as templates (black plus transparency, tinted by the system
+    // for light and dark menu bars); other platforms keep the colored app icon.
+    #[cfg(target_os = "macos")]
+    {
+        tray = tray.icon(tauri::include_image!("icons/tray-icon.png")).icon_as_template(true);
+    }
+    #[cfg(not(target_os = "macos"))]
     if let Some(icon) = app.default_window_icon() {
         tray = tray.icon(icon.clone());
     }
