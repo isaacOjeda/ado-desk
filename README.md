@@ -34,16 +34,28 @@ On first launch, choose "Always Allow" when macOS asks for keychain access.
 On Windows, run `pnpm tauri build` (requires the Visual Studio C++ Build Tools and Rust with the MSVC
 toolchain) and run the installer from `src-tauri/target/release/bundle/nsis/` or `bundle/msi/`.
 
+## CI
+
+`.github/workflows/ci.yml` runs on every pull request to `main` (and on pushes to `main`), on macOS and
+Windows: `pnpm build` (type check + frontend build), `cargo clippy --all-targets -- -D warnings` and
+`cargo test`.
+
 ## Release
 
-`.github/workflows/release.yml` builds installers for macOS (Apple Silicon and Intel, `.dmg`) and
-Windows (x64, NSIS `.exe`).
+Every push to `main` publishes a release (`.github/workflows/release.yml`):
 
-- Run it by hand from the Actions tab to build only; the installers are attached to the run as artifacts.
-- Push a tag to publish: bump `version` in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` and
-  `package.json`, commit, then `git tag v<version> && git push origin v<version>`. The workflow checks
-  that the tag matches `tauri.conf.json` and creates a **draft** release with the installers and
-  `.github/release-notes.md`; review it and publish it from GitHub.
+1. `scripts/release-plan.mjs` reads the [Conventional Commits](https://www.conventionalcommits.org) since the
+   latest `v*` tag and picks the next version: a breaking change (`feat!:` or a `BREAKING CHANGE:` footer)
+   bumps major (minor while on 0.x), `feat` bumps minor, anything else bumps patch.
+2. It builds installers for macOS (Apple Silicon and Intel, `.dmg`) and Windows (x64, NSIS `.exe`), with that
+   version injected at build time. The version in `tauri.conf.json`, `Cargo.toml` and `package.json` is not
+   bumped; the tag is the source of truth.
+3. It tags the pushed commit and publishes the release. The notes list the changes grouped by type
+   (breaking changes, features, fixes, performance, other) followed by `.github/release-notes.md`.
+
+Write commit subjects (or squash-merge PR titles) as Conventional Commits, since they become the release notes.
+A manual run from the Actions tab only builds; the installers are attached to the run as artifacts.
+Run the release script tests with `pnpm test:scripts`.
 
 ## Sign in
 
