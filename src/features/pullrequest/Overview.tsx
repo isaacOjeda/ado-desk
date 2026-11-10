@@ -4,6 +4,8 @@ import { Avatar, Badge, RichText } from "../../components/ui";
 import { workItemTypeTone, stateTone } from "../../lib/format";
 import type { Resource } from "../../lib/useResource";
 import type { PullRequestDetail, PullRequestThread, Reviewer } from "./api";
+import type { PullRequestChecks } from "./checks";
+import { ChecksSection } from "./ChecksSection";
 import { Async } from "./Async";
 import { mergeStatus, reviewerVote } from "./format";
 import { Discussion } from "./Threads";
@@ -24,10 +26,12 @@ function ReviewerRow({ reviewer }: { reviewer: Reviewer }) {
   );
 }
 
-function Aside({ detail }: { detail: PullRequestDetail }) {
+function Aside({ detail, checks }: { detail: PullRequestDetail; checks: Resource<PullRequestChecks> }) {
   const merge = mergeStatus(detail.mergeStatus);
   return (
     <aside className="detail-aside">
+      <ChecksSection checks={checks} />
+
       <section>
         <h3 className="section-title">Reviewers</h3>
         {detail.reviewers.length === 0 ? (
@@ -85,9 +89,11 @@ function Aside({ detail }: { detail: PullRequestDetail }) {
 export function Overview({
   detail,
   threads,
+  checks,
 }: {
   detail: Resource<PullRequestDetail>;
   threads: Resource<PullRequestThread[]>;
+  checks: Resource<PullRequestChecks>;
 }) {
   return (
     <Async resource={detail}>
@@ -107,7 +113,7 @@ export function Overview({
               <Async resource={threads}>{(list) => <Discussion threads={list} />}</Async>
             </section>
           </div>
-          <Aside detail={pr} />
+          <Aside detail={pr} checks={checks} />
         </div>
       )}
     </Async>

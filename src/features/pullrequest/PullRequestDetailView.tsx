@@ -6,6 +6,7 @@ import type { PullRequest } from "../../lib/api";
 import { timeAgo } from "../../lib/format";
 import { useResource } from "../../lib/useResource";
 import { pullRequestApi, type PullRequestThread } from "./api";
+import { checksApi } from "./checks";
 import { FilesTab } from "./Files";
 import { statusBadge } from "./format";
 import { Overview } from "./Overview";
@@ -28,6 +29,7 @@ export function PullRequestDetailView({ pullRequest, onBack }: PullRequestDetail
   const detail = useResource(useCallback(() => pullRequestApi.detail({ project, repositoryId, id }), [project, repositoryId, id]));
   const threads = useResource(useCallback(() => pullRequestApi.threads({ project, repositoryId, id }), [project, repositoryId, id]));
   const files = useResource(useCallback(() => pullRequestApi.files({ project, repositoryId, id }), [project, repositoryId, id]));
+  const checks = useResource(useCallback(() => checksApi.detail({ project, repositoryId, id }), [project, repositoryId, id]));
 
   const status = statusBadge(detail.data?.status ?? (pullRequest.isDraft ? "draft" : "active"));
   const fileCount = files.data?.files.length;
@@ -69,7 +71,7 @@ export function PullRequestDetailView({ pullRequest, onBack }: PullRequestDetail
 
       <div className={`detail-body${tab === "files" ? " pr-files-body" : ""}`}>
         {tab === "overview" ? (
-          <Overview detail={detail} threads={threads} />
+          <Overview detail={detail} threads={threads} checks={checks} />
         ) : (
           <FilesTab pr={pullRequest} files={files} threads={threads.data ?? NO_THREADS} />
         )}
