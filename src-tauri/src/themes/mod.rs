@@ -8,6 +8,8 @@ pub mod store;
 mod vscode;
 mod vsix;
 
+pub(crate) use vsix::is_format_char;
+
 use std::path::PathBuf;
 use std::sync::Mutex;
 

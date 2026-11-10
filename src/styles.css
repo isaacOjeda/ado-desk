@@ -158,6 +158,63 @@ a {
   font-variant-numeric: tabular-nums;
 }
 
+.nav-views {
+  margin-top: 14px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.nav-heading {
+  margin: 0 0 4px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.nav-view {
+  position: relative;
+  display: flex;
+}
+
+.nav-view .nav-item {
+  flex: 1;
+  min-width: 0;
+  padding-right: 28px;
+}
+
+.nav-view-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-view-remove {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  color: var(--text-faint);
+  opacity: 0;
+  transition: opacity 120ms, background 120ms;
+}
+
+.nav-view:hover .nav-view-remove,
+.nav-view-remove:focus-visible {
+  opacity: 1;
+}
+
+.nav-view-remove:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
 .user {
   margin-top: auto;
   display: flex;

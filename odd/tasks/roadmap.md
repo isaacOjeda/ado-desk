@@ -12,7 +12,7 @@ Order is by dependency first, then value. Update the Status cell; never delete a
 | 1 | Quick search (Cmd+K in the app) | — | none | — | Done (main c87b2bb, 2026-11-07) |
 | 2 | Background mode + global floating search bar | 1 | none | 5 (new plugin deps) | Done (main 1f5afb0, 2026-11-07) |
 | 3 | Notifications for what needs you | 2 | none | 4 (polling, async ordering) | Done (main 3e32270, 2026-11-07) |
-| 4 | Saved views | — | none | 3 (persisted settings shape) | Planned |
+| 4 | Saved views | — | none | 3 (persisted settings shape) | Implemented on feat/saved-views, pending merge (2026-11-10) |
 | 5 | Build and policy status on PRs | — | Build (Read) | 2 (PAT scope, `Forbidden` message) | Planned |
 | 6 | Write actions | 5 | Work Items + Code (Read & Write) | 1, 2 (irreversible remote changes) | Planned |
 

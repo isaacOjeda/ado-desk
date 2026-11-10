@@ -10,10 +10,13 @@ export interface Option {
 export function FilterBar({
   activeCount,
   onReset,
+  onSaveView,
   children,
 }: {
   activeCount: number;
   onReset: () => void;
+  /** Saves the current filters as a named view; rejects with a message to show. */
+  onSaveView?: (name: string) => Promise<void>;
   children: ReactNode;
 }) {
   return (
@@ -28,8 +31,81 @@ export function FilterBar({
         <button className="btn btn-ghost btn-sm" onClick={onReset} disabled={activeCount === 0}>
           Reset
         </button>
+        {onSaveView && <SaveView onSave={onSaveView} />}
       </span>
     </div>
+  );
+}
+
+/** "Save view" button that turns into an inline name field: Enter saves, Esc cancels. */
+function SaveView({ onSave }: { onSave: (name: string) => Promise<void> }) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const close = () => {
+    setEditing(false);
+    setName("");
+    setError(null);
+  };
+
+  const submit = () => {
+    if (saving) return;
+    if (name.trim() === "") {
+      setError("Name the view first.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    onSave(name.trim())
+      .then(close)
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not save the view."))
+      .finally(() => setSaving(false));
+  };
+
+  if (!editing) {
+    return (
+      <button className="btn btn-ghost btn-sm" onClick={() => setEditing(true)} title="Save these filters as a view">
+        Save view
+      </button>
+    );
+  }
+
+  return (
+    <span className="filter-save">
+      <input
+        className="filter-save-input"
+        autoFocus
+        placeholder="View name"
+        aria-label="View name"
+        maxLength={60}
+        value={name}
+        disabled={saving}
+        onChange={(e) => {
+          setName(e.target.value);
+          setError(null);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") submit();
+          if (e.key === "Escape") {
+            e.stopPropagation();
+            close();
+          }
+        }}
+      />
+      <button className="btn btn-sm" onClick={submit} disabled={saving}>
+        Save
+      </button>
+      <button className="btn btn-ghost btn-sm" onClick={close} disabled={saving}>
+        Cancel
+      </button>
+      {error && (
+        <span className="filter-save-error" role="alert">
+          {error}
+        </span>
+      )}
+    </span>
   );
 }
 

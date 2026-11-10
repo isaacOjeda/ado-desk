@@ -103,7 +103,7 @@ fn parent(path: &str) -> &str {
 }
 
 /// Bidirectional and zero-width format characters, which can make a name display as something else.
-fn is_format_char(c: char) -> bool {
+pub(crate) fn is_format_char(c: char) -> bool {
     matches!(c, '\u{200b}'..='\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2060}'..='\u{2069}' | '\u{feff}')
 }
 

@@ -18,6 +18,7 @@ interface Props {
   onChange: (filter: WorkItemFilter) => void;
   /** Projects of the active organization; `null` while loading. */
   projects: string[] | null;
+  onSaveView?: (name: string) => Promise<void>;
 }
 
 const ALL = "";
@@ -41,7 +42,7 @@ function iterationValue(iteration: IterationFilter): string {
   return iteration.kind === "path" ? `path:${iteration.path}` : iteration.kind;
 }
 
-export function WorkItemFilterBar({ filter, onChange, projects }: Props) {
+export function WorkItemFilterBar({ filter, onChange, projects, onSaveView }: Props) {
   const project = filter.project;
   const iterations = useResource<Iteration[]>(
     useCallback(() => (project ? filtersApi.listIterations(project) : Promise.resolve([])), [project]),
@@ -96,7 +97,7 @@ export function WorkItemFilterBar({ filter, onChange, projects }: Props) {
     });
 
   return (
-    <FilterBar activeCount={countWorkItemFilters(filter)} onReset={() => onChange(DEFAULT_WORK_ITEM_FILTER)}>
+    <FilterBar activeCount={countWorkItemFilters(filter)} onReset={() => onChange(DEFAULT_WORK_ITEM_FILTER)} onSaveView={onSaveView}>
       <FilterSelect
         label="Project"
         value={project ?? ALL}
