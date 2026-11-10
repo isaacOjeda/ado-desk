@@ -112,6 +112,7 @@ pub fn from_value(value: Value) -> Views {
     let Value::Array(items) = value else {
         return Views::default();
     };
+    let total = items.len();
     let mut views: Vec<SavedView> = Vec::new();
     for item in items {
         let Some(view) = serde_json::from_value::<SavedView>(item).ok().and_then(clean) else {
@@ -123,6 +124,10 @@ pub fn from_value(value: Value) -> Views {
         if !views.iter().any(|v| v.id == view.id) {
             views.push(view);
         }
+    }
+    if views.len() < total {
+        // The next settings write persists the reduced list; leave a trace without the content.
+        eprintln!("settings: ignored {} saved view(s) that could not be read", total - views.len());
     }
     Views(views)
 }
@@ -179,11 +184,11 @@ fn clean_name(name: &str) -> Option<String> {
 }
 
 fn clean_organization(organization: &str) -> Option<String> {
-    let organization = organization.trim();
+    let organization = organization.trim().to_lowercase();
     let valid = !organization.is_empty()
         && organization.len() <= MAX_ORGANIZATION_LEN
         && !organization.chars().any(char::is_control);
-    valid.then(|| organization.to_lowercase())
+    valid.then_some(organization)
 }
 
 fn is_valid_filter(filter: &Value) -> bool {
@@ -210,21 +215,28 @@ fn new_id(views: &Views) -> String {
     }
 }
 
-/// Applies `change` to the stored views, persists and broadcasts the settings. Serialized with
-/// `update_settings` through the `updates` gate.
+/// Applies `change` to the stored views and persists the settings. Serialized with
+/// `update_settings` through the `updates` gate. A rejected change or a failed write leaves
+/// both the file and the in-memory settings as they were.
+fn change_views(
+    state: &SettingsState,
+    change: impl FnOnce(&Views) -> Result<Views, ViewError>,
+) -> Result<Settings, String> {
+    let _update = state.updates.lock().unwrap_or_else(|e| e.into_inner());
+    let mut next = state.current();
+    next.views = change(&next.views).map_err(|e| e.message().to_string())?;
+    settings::save(&state.path, &next).map_err(|e| format!("Could not save settings: {e}"))?;
+    *state.settings.lock().unwrap_or_else(|e| e.into_inner()) = next.clone();
+    Ok(next)
+}
+
+/// `change_views`, then broadcasts the stored settings to every window.
 fn update_views(
     app: &AppHandle,
     state: &SettingsState,
     change: impl FnOnce(&Views) -> Result<Views, ViewError>,
 ) -> Result<Settings, String> {
-    let settings = {
-        let _update = state.updates.lock().unwrap_or_else(|e| e.into_inner());
-        let mut next = state.current();
-        next.views = change(&next.views).map_err(|e| e.message().to_string())?;
-        settings::save(&state.path, &next).map_err(|e| format!("Could not save settings: {e}"))?;
-        *state.settings.lock().unwrap_or_else(|e| e.into_inner()) = next.clone();
-        next
-    };
+    let settings = change_views(state, change)?;
     let _ = app.emit(settings::CHANGED_EVENT, &settings);
     Ok(settings)
 }
@@ -411,6 +423,30 @@ mod tests {
 
         assert_eq!(merged.views, stored.views);
         assert_eq!(merged.appearance.mode, settings::ThemeMode::Light);
+    }
+
+    #[test]
+    fn a_view_change_is_persisted_and_a_rejected_one_changes_nothing() {
+        let nanos = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let dir = std::env::temp_dir().join(format!("ado-desk-views-{}-{nanos}", std::process::id()));
+        let path = dir.join(settings::FILE_NAME);
+        let state = SettingsState::load(path.clone());
+
+        let saved = change_views(&state, |views| add(views, "contoso", ViewScope::PullRequests, "Mine", pr_filter(), "view-1".into())).unwrap();
+        assert_eq!(ids(&saved.views), vec!["starter-review", "starter-closed", "view-1"]);
+        assert_eq!(settings::load(&path), saved);
+        assert_eq!(state.current(), saved);
+        let on_disk = std::fs::read(&path).unwrap();
+
+        let rejected = change_views(&state, |views| add(views, "contoso", ViewScope::PullRequests, " ", pr_filter(), "view-2".into()));
+        assert_eq!(rejected, Err(ViewError::InvalidName.message().to_string()));
+        assert_eq!(std::fs::read(&path).unwrap(), on_disk);
+        assert_eq!(state.current(), saved);
+
+        let removed = change_views(&state, |views| Ok(remove(views, "starter-review"))).unwrap();
+        assert_eq!(ids(&removed.views), vec!["starter-closed", "view-1"]);
+        assert_eq!(settings::load(&path), removed);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
