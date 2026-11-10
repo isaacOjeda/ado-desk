@@ -22,6 +22,9 @@ pub const MAX_VIEWS: usize = 50;
 pub const MAX_NAME_CHARS: usize = 60;
 /// Size of the filter serialized as JSON.
 pub const MAX_FILTER_BYTES: usize = 4096;
+/// Nesting levels of the filter; real filters use 3. Keeps `settings.json`, where the filter
+/// sits a few levels deeper, under serde_json's recursion limit so the file always loads.
+pub const MAX_FILTER_DEPTH: usize = 8;
 const MAX_ID_LEN: usize = 64;
 const MAX_ORGANIZATION_LEN: usize = 256;
 
@@ -180,7 +183,8 @@ fn clean(view: SavedView) -> Option<SavedView> {
 fn clean_name(name: &str) -> Option<String> {
     let name = name.trim();
     let length = name.chars().count();
-    ((1..=MAX_NAME_CHARS).contains(&length) && !name.chars().any(char::is_control)).then(|| name.to_string())
+    let printable = !name.chars().any(|c| c.is_control() || crate::themes::is_format_char(c));
+    ((1..=MAX_NAME_CHARS).contains(&length) && printable).then(|| name.to_string())
 }
 
 fn clean_organization(organization: &str) -> Option<String> {
@@ -192,7 +196,18 @@ fn clean_organization(organization: &str) -> Option<String> {
 }
 
 fn is_valid_filter(filter: &Value) -> bool {
-    filter.is_object() && serde_json::to_vec(filter).is_ok_and(|bytes| bytes.len() <= MAX_FILTER_BYTES)
+    filter.is_object()
+        && depth(filter) <= MAX_FILTER_DEPTH
+        && serde_json::to_vec(filter).is_ok_and(|bytes| bytes.len() <= MAX_FILTER_BYTES)
+}
+
+/// Nesting levels of objects and arrays (`{}` is 1, a scalar 0).
+fn depth(value: &Value) -> usize {
+    match value {
+        Value::Object(map) => 1 + map.values().map(depth).max().unwrap_or(0),
+        Value::Array(items) => 1 + items.iter().map(depth).max().unwrap_or(0),
+        _ => 0,
+    }
 }
 
 /// Ids are short slugs (`[a-z0-9-]`): the starters' fixed ids and `view-<hex>` for saved ones.
@@ -447,6 +462,34 @@ mod tests {
         assert_eq!(ids(&removed.views), vec!["starter-closed", "view-1"]);
         assert_eq!(settings::load(&path), removed);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn nested(depth: usize) -> Value {
+        (1..depth).fold(json!({ "a": 1 }), |inner, _| json!({ "a": inner }))
+    }
+
+    #[test]
+    fn deeply_nested_filters_are_refused_so_the_settings_file_stays_loadable() {
+        let empty = Views(vec![]);
+        let save = |filter: Value| add(&empty, "contoso", ViewScope::WorkItems, "Deep", filter, "view-1".into());
+
+        assert!(save(nested(MAX_FILTER_DEPTH)).is_ok());
+        assert_eq!(save(nested(MAX_FILTER_DEPTH + 1)), Err(ViewError::InvalidFilter));
+        assert_eq!(save(nested(125)), Err(ViewError::InvalidFilter));
+
+        let mut deep = view("deep", Some("contoso"));
+        deep["filter"] = nested(MAX_FILTER_DEPTH + 1);
+        let views = from_value(json!([deep, view("good", Some("contoso"))]));
+        assert_eq!(ids(&views), vec!["good"]);
+    }
+
+    #[test]
+    fn names_with_bidi_or_zero_width_characters_are_refused() {
+        let empty = Views(vec![]);
+        for name in ["evil\u{202e}txt", "zero\u{200b}width", "\u{feff}bom"] {
+            let result = add(&empty, "contoso", ViewScope::WorkItems, name, json!({}), "view-1".into());
+            assert_eq!(result, Err(ViewError::InvalidName), "{name:?}");
+        }
     }
 
     #[test]

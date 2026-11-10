@@ -11,15 +11,21 @@ export function useSavedViews(): [SavedView[] | null, (settings: Settings) => vo
 
   useEffect(() => {
     let active = true;
+    // A `settings-changed` event is newer than a `get` still in flight; never overwrite it.
+    let changed = false;
     settingsApi
       .get()
-      .then((settings) => active && setViews(settings.views))
-      .catch(() => active && setViews([]));
+      .then((settings) => active && !changed && setViews(settings.views))
+      .catch(() => active && !changed && setViews([]));
 
     let unlisten: (() => void) | undefined;
     try {
       settingsApi
-        .onChanged((settings) => active && setViews(settings.views))
+        .onChanged((settings) => {
+          if (!active) return;
+          changed = true;
+          setViews(settings.views);
+        })
         .then((stop) => (active ? (unlisten = stop) : stop()))
         .catch(() => {});
     } catch {
