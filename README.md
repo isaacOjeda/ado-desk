@@ -31,6 +31,12 @@ To install a release build locally (macOS), run `pnpm app:install`. It builds `A
 quits a running copy, replaces `/Applications/ADO Desk.app` and opens it (`--no-open` skips the last step).
 On first launch, choose "Always Allow" when macOS asks for keychain access.
 
+## CI
+
+`.github/workflows/ci.yml` runs on every pull request to `main` (and on pushes to `main`), on macOS and
+Windows: `pnpm build` (type check + frontend build), `cargo clippy --all-targets -- -D warnings` and
+`cargo test`.
+
 ## Release
 
 `.github/workflows/release.yml` builds installers for macOS (Apple Silicon and Intel, `.dmg`) and
