@@ -8,7 +8,7 @@ pub enum AppError {
     InvalidOrganization,
     #[error("The personal access token is invalid or expired")]
     Unauthorized,
-    #[error("The token lacks the required scopes (Work Items, Code, Project and Team: Read)")]
+    #[error("The token lacks the required scopes (Work Items, Code, Project and Team: Read). Build (Read) is optional, for build status")]
     Forbidden,
     #[error("Resource not found")]
     NotFound,
@@ -34,7 +34,7 @@ pub enum AppError {
 }
 
 impl AppError {
-    fn kind(&self) -> &'static str {
+    pub(crate) fn kind(&self) -> &'static str {
         match self {
             AppError::InvalidOrganization => "invalidOrganization",
             AppError::Unauthorized => "unauthorized",

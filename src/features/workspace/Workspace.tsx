@@ -26,6 +26,7 @@ import { InboxView } from "../inbox/InboxView";
 import { inboxApi, useInbox } from "../inbox/api";
 import { activeViewId, viewsFor } from "../views/model";
 import { useSavedViews } from "../views/useSavedViews";
+import { useCheckSummaries } from "../pullrequest/checks";
 
 interface Props {
   session: Session;
@@ -104,6 +105,8 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
     useCallback(() => filtersApi.queryPullRequests(pullRequestFilter), [organization, pullRequestFilter]),
   );
   const projects = useResource(useCallback(() => filtersApi.listProjects(), [organization]));
+  // Dots for active pull requests, loaded after each list fetch.
+  const checkSummaries = useCheckSummaries(organization, pullRequests.data);
   const [allViews, acceptViews] = useSavedViews();
   const [viewError, setViewError] = useState<string | null>(null);
   const views = useMemo(() => viewsFor(allViews ?? [], organization), [allViews, organization]);
@@ -284,6 +287,7 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
               pullRequests={visiblePullRequests}
               isFiltered={countPullRequestFilters(pullRequestFilter) > 0 || query.trim() !== ""}
               onSelect={(pullRequest) => setSelection({ kind: "pullRequest", pullRequest })}
+              checks={checkSummaries}
             />
           )}
         </section>

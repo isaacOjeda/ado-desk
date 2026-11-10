@@ -65,6 +65,7 @@ with these scopes:
 - **Work Items**: Read
 - **Code**: Read
 - **Project and Team**: Read (used to discover projects for the pull request list)
+- **Build**: Read (optional: build status on pull requests; without it, builds show as unavailable and everything else still loads)
 
 Enter your organization (`contoso` or `https://dev.azure.com/contoso`) and the token.
 The token is validated against Azure DevOps, then stored in the OS credential store

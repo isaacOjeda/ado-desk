@@ -102,9 +102,18 @@ fn parent(path: &str) -> &str {
     path.rsplit_once('/').map_or("", |(dir, _)| dir)
 }
 
-/// Bidirectional and zero-width format characters, which can make a name display as something else.
+/// Bidirectional, zero-width and line/paragraph separator characters, which can make a name
+/// display as something else.
 pub(crate) fn is_format_char(c: char) -> bool {
-    matches!(c, '\u{200b}'..='\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2060}'..='\u{2069}' | '\u{feff}')
+    matches!(
+        c,
+        '\u{061c}'
+            | '\u{180e}'
+            | '\u{200b}'..='\u{200f}'
+            | '\u{2028}'..='\u{202e}'
+            | '\u{2060}'..='\u{2069}'
+            | '\u{feff}'
+    )
 }
 
 /// Keeps printable characters (no control or bidi format characters), trims, and bounds the length.
