@@ -1,4 +1,5 @@
 import type { Session } from "../../lib/api";
+import type { SavedView } from "../../lib/settings";
 import { initials } from "../../lib/format";
 import { OrgSwitcher } from "../organizations/OrgSwitcher";
 import { MOD_KEY } from "../../lib/platform";
@@ -13,6 +14,12 @@ interface Props {
   onSignOut: () => void;
   onOpenSettings: () => void;
   onSearch: () => void;
+  /** Views of the active organization plus the starters. */
+  views: SavedView[];
+  /** The view whose filters equal the current ones of the list on screen. */
+  activeViewId: string | null;
+  onApplyView: (view: SavedView) => void;
+  onRemoveView: (view: SavedView) => void;
 }
 
 const NAV: { view: View; label: string; icon: string }[] = [
@@ -21,7 +28,19 @@ const NAV: { view: View; label: string; icon: string }[] = [
   { view: "pullRequests", label: "Pull requests", icon: "⇄" },
 ];
 
-export function Sidebar({ session, view, counts, onSelect, onSignOut, onOpenSettings, onSearch }: Props) {
+export function Sidebar({
+  session,
+  view,
+  counts,
+  onSelect,
+  onSignOut,
+  onOpenSettings,
+  onSearch,
+  views,
+  activeViewId,
+  onApplyView,
+  onRemoveView,
+}: Props) {
   return (
     <aside className="sidebar">
       <div className="sidebar-top" data-tauri-drag-region />
@@ -54,6 +73,34 @@ export function Sidebar({ session, view, counts, onSelect, onSignOut, onOpenSett
           </button>
         ))}
       </nav>
+
+      {views.length > 0 && (
+        <nav className="nav nav-views" aria-label="Saved views">
+          <p className="nav-heading">Views</p>
+          {views.map((saved) => (
+            <div key={saved.id} className="nav-view">
+              <button
+                className={`nav-item ${activeViewId === saved.id ? "is-active" : ""}`}
+                onClick={() => onApplyView(saved)}
+                title={saved.name}
+              >
+                <span className="nav-icon" aria-hidden>
+                  {saved.scope === "workItems" ? "▤" : "⇄"}
+                </span>
+                <span className="nav-view-name">{saved.name}</span>
+              </button>
+              <button
+                className="nav-view-remove"
+                onClick={() => onRemoveView(saved)}
+                title="Remove view"
+                aria-label={`Remove view ${saved.name}`}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </nav>
+      )}
 
       <div className="user">
         <span className="avatar">{initials(session.displayName)}</span>

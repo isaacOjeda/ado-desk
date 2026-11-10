@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ApiError, Session, WorkItem } from "../../lib/api";
-import { settingsApi } from "../../lib/settings";
+import { settingsApi, type SavedView, type ViewScope } from "../../lib/settings";
 import { useResource } from "../../lib/useResource";
 import { MOD_KEY } from "../../lib/platform";
 import { ErrorBanner, Spinner } from "../../components/ui";
@@ -24,6 +24,8 @@ import { recordRecent } from "../search/recents";
 import { requestQuickSearch } from "../search/events";
 import { InboxView } from "../inbox/InboxView";
 import { inboxApi, useInbox } from "../inbox/api";
+import { activeViewId, viewsFor } from "../views/model";
+import { useSavedViews } from "../views/useSavedViews";
 
 interface Props {
   session: Session;
@@ -102,6 +104,41 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
     useCallback(() => filtersApi.queryPullRequests(pullRequestFilter), [organization, pullRequestFilter]),
   );
   const projects = useResource(useCallback(() => filtersApi.listProjects(), [organization]));
+  const [allViews, acceptViews] = useSavedViews();
+  const [viewError, setViewError] = useState<string | null>(null);
+  const views = useMemo(() => viewsFor(allViews ?? [], organization), [allViews, organization]);
+  const currentViewId = useMemo(
+    () =>
+      activeViewId(
+        views,
+        { workItems: workItemFilter, pullRequests: pullRequestFilter },
+        view === "inbox" || selection ? null : view,
+      ),
+    [views, workItemFilter, pullRequestFilter, view, selection],
+  );
+
+  // A view applies its filters through the list's persistent filter, so the list keeps them.
+  const applyView = (saved: SavedView) => {
+    setViewError(null);
+    setSelection(null);
+    if (saved.scope === "workItems") setWorkItemFilter(parseWorkItemFilter(saved.filter));
+    else setPullRequestFilter(parsePullRequestFilter(saved.filter));
+    setView(saved.scope);
+  };
+
+  const saveView = (scope: ViewScope, filter: unknown) => async (name: string) => {
+    acceptViews(await settingsApi.saveView(organization, scope, name, filter));
+  };
+
+  const removeView = (saved: SavedView) => {
+    setViewError(null);
+    settingsApi
+      .deleteView(saved.id)
+      .then(acceptViews)
+      .catch((err: unknown) =>
+        setViewError(`Could not remove the view: ${err instanceof Error ? err.message : "unknown error"}`),
+      );
+  };
   const active = view === "workItems" ? workItems : pullRequests;
   const inbox = useInbox();
   const unread = inbox?.filter((item) => !item.read).length ?? 0;
@@ -162,12 +199,17 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
           pullRequests: pullRequests.data?.length ?? null,
         }}
         onSelect={(next) => {
+          setViewError(null);
           setSelection(null);
           setView(next);
         }}
         onSignOut={onSignOut}
         onOpenSettings={openSettings}
         onSearch={requestQuickSearch}
+        views={views}
+        activeViewId={currentViewId}
+        onApplyView={applyView}
+        onRemoveView={removeView}
       />
 
       <main className="content">
@@ -211,16 +253,19 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
             filter={workItemFilter}
             onChange={setWorkItemFilter}
             projects={projects.data}
+            onSaveView={saveView("workItems", workItemFilter)}
           />
         ) : (
           <PullRequestFilterBar
             filter={pullRequestFilter}
             onChange={setPullRequestFilter}
             projects={projects.data}
+            onSaveView={saveView("pullRequests", pullRequestFilter)}
           />
         )}
 
         <section className="panel">
+          {viewError && <ErrorBanner message={viewError} />}
           {view !== "inbox" && active.error && <ErrorBanner message={active.error.message} onRetry={active.reload} />}
           {view === "inbox" ? (
             <InboxView items={inbox} query={query} />

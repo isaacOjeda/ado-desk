@@ -8,6 +8,7 @@ interface Props {
   onChange: (filter: PullRequestFilter) => void;
   /** Projects of the active organization; `null` while loading. */
   projects: string[] | null;
+  onSaveView?: (name: string) => Promise<void>;
 }
 
 const STATUS_OPTIONS: Option[] = [
@@ -26,11 +27,11 @@ function roleOptions(hasProject: boolean): Option[] {
   return hasProject ? [...roles, { value: "everyone", label: "Everyone" }] : roles;
 }
 
-export function PullRequestFilterBar({ filter, onChange, projects }: Props) {
+export function PullRequestFilterBar({ filter, onChange, projects, onSaveView }: Props) {
   const update = (patch: Partial<PullRequestFilter>) => onChange(normalizePullRequestFilter({ ...filter, ...patch }));
 
   return (
-    <FilterBar activeCount={countPullRequestFilters(filter)} onReset={() => onChange(DEFAULT_PULL_REQUEST_FILTER)}>
+    <FilterBar activeCount={countPullRequestFilters(filter)} onReset={() => onChange(DEFAULT_PULL_REQUEST_FILTER)} onSaveView={onSaveView}>
       <FilterSelect
         label="Project"
         value={filter.project ?? ""}
