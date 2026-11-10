@@ -132,13 +132,21 @@ pub fn probe_patch(rev: i64) -> AppResult<Value> {
     Ok(json!([revision_test(rev)?]))
 }
 
-/// What the probe outcome means for the session: `Some` outcomes are remembered.
-pub fn probe_access(outcome: &AppResult<()>) -> Option<WriteAccess> {
+/// What the session remembers after a write or the probe answered `outcome`: an accepted
+/// write grants; a denial forgets, since it may concern one item only (an area the user cannot
+/// edit), so the next detail probes again; anything else changes nothing.
+pub fn remembered_access(current: WriteAccess, outcome: &AppResult<()>) -> WriteAccess {
     match outcome {
-        Ok(()) => Some(WriteAccess::Granted),
-        Err(AppError::WriteDenied) => Some(WriteAccess::Denied),
-        Err(_) => None,
+        Ok(()) => WriteAccess::Granted,
+        Err(AppError::WriteDenied) => WriteAccess::Unknown,
+        Err(_) => current,
     }
+}
+
+/// Whether a detail shows the actions after its probe answered `outcome`: only a denial for
+/// lack of access hides them.
+pub fn shows_actions(outcome: &AppResult<()>) -> bool {
+    !matches!(outcome, Err(AppError::WriteDenied))
 }
 
 fn revision_test(rev: i64) -> AppResult<Value> {
@@ -196,15 +204,7 @@ async fn type_states(
         .collect())
 }
 
-/// Refuses early when this session already knows the token cannot write work items.
-fn ensure_writable(client: &AzdoClient) -> AppResult<()> {
-    match client.work_write_access() {
-        WriteAccess::Denied => Err(AppError::WriteDenied),
-        _ => Ok(()),
-    }
-}
-
-/// Sends a write and records a denial, so the detail switches to its read-only hint.
+/// Sends a write and updates what the session remembers about write access.
 async fn send_write(
     client: &AzdoClient,
     method: Method,
@@ -213,16 +213,13 @@ async fn send_write(
     content_type: &'static str,
 ) -> AppResult<()> {
     let result = client.write(method, url, body, content_type).await;
-    match &result {
-        Ok(()) => client.record_work_write_access(WriteAccess::Granted),
-        Err(AppError::WriteDenied) => client.record_work_write_access(WriteAccess::Denied),
-        Err(_) => {}
-    }
+    client.record_work_write_access(remembered_access(client.work_write_access(), &result));
     result
 }
 
-/// Whether the actions should show for this organization: `false` only when Azure DevOps
-/// refused a write (or the write probe) for lack of access.
+/// Whether the detail of work item `id` (at revision `rev`) shows the actions: `false` only
+/// when Azure DevOps refused a validate-only update for lack of access. Once a write was
+/// accepted, the session skips the probe.
 #[tauri::command]
 pub async fn work_item_write_access(
     state: State<'_, AppState>,
@@ -230,21 +227,21 @@ pub async fn work_item_write_access(
     rev: i64,
 ) -> AppResult<bool> {
     let client = current_client(&state)?;
-    if client.work_write_access() == WriteAccess::Unknown {
-        let id = valid_id(id)?;
-        let mut url = client.url(&["_apis", "wit", "workitems", &id]);
-        url.query_pairs_mut().append_pair("validateOnly", "true");
-        let outcome = client
-            .write(Method::PATCH, url, &probe_patch(rev)?, JSON_PATCH)
-            .await;
-        if let Err(err) = &outcome {
-            eprintln!("work item write probe: {}", err.kind());
-        }
-        if let Some(access) = probe_access(&outcome) {
-            client.record_work_write_access(access);
-        }
+    if client.work_write_access() == WriteAccess::Granted {
+        return Ok(true);
     }
-    Ok(client.work_write_access() != WriteAccess::Denied)
+    // Without a usable id and revision there is nothing to probe: show the actions.
+    let (Ok(id), Ok(patch)) = (valid_id(id), probe_patch(rev)) else {
+        return Ok(true);
+    };
+    let mut url = client.url(&["_apis", "wit", "workitems", &id]);
+    url.query_pairs_mut().append_pair("validateOnly", "true");
+    let outcome = client.write(Method::PATCH, url, &patch, JSON_PATCH).await;
+    if let Err(err) = &outcome {
+        eprintln!("work item write probe: {}", err.kind());
+    }
+    client.record_work_write_access(remembered_access(client.work_write_access(), &outcome));
+    Ok(shows_actions(&outcome))
 }
 
 #[tauri::command]
@@ -269,7 +266,6 @@ pub async fn set_work_item_state(
     value: String,
 ) -> AppResult<()> {
     let client = current_client(&state)?;
-    ensure_writable(&client)?;
     let project = valid_project(&project)?;
     let work_item_type = validate_type(&work_item_type)?;
     let id = valid_id(id)?;
@@ -289,7 +285,6 @@ pub async fn set_work_item_assignee(
     assignee: Option<String>,
 ) -> AppResult<()> {
     let client = current_client(&state)?;
-    ensure_writable(&client)?;
     let project = valid_project(&project)?;
     let id = valid_id(id)?;
     let members = match assignee.as_deref().map(str::trim) {
@@ -315,7 +310,6 @@ pub async fn add_work_item_comment(
     text: String,
 ) -> AppResult<()> {
     let client = current_client(&state)?;
-    ensure_writable(&client)?;
     let project = valid_project(&project)?;
     let id = valid_id(id)?;
     let html = comment_html(&text)?;
@@ -458,17 +452,38 @@ mod tests {
     }
 
     #[test]
-    fn probe_access_remembers_only_definite_answers() {
-        assert_eq!(probe_access(&Ok(())), Some(WriteAccess::Granted));
+    fn remembered_access_grants_on_success_and_forgets_on_denial() {
+        use WriteAccess::{Granted, Unknown};
+        assert_eq!(remembered_access(Unknown, &Ok(())), Granted);
+        assert_eq!(remembered_access(Granted, &Ok(())), Granted);
+        // A denial may be specific to one item: never remembered as an organization-wide no.
         assert_eq!(
-            probe_access(&Err(AppError::WriteDenied)),
-            Some(WriteAccess::Denied)
+            remembered_access(Granted, &Err(AppError::WriteDenied)),
+            Unknown
         );
-        assert_eq!(probe_access(&Err(AppError::WriteRejected)), None);
-        assert_eq!(probe_access(&Err(AppError::NotFound)), None);
         assert_eq!(
-            probe_access(&Err(AppError::Network("timeout".into()))),
-            None
+            remembered_access(Unknown, &Err(AppError::WriteDenied)),
+            Unknown
         );
+        for other in [
+            AppError::WriteRejected,
+            AppError::NotFound,
+            AppError::Network("timeout".into()),
+        ] {
+            assert_eq!(remembered_access(Granted, &Err(other)), Granted);
+        }
+        assert_eq!(
+            remembered_access(Unknown, &Err(AppError::WriteRejected)),
+            Unknown
+        );
+    }
+
+    #[test]
+    fn shows_actions_unless_the_probe_was_denied() {
+        assert!(shows_actions(&Ok(())));
+        assert!(!shows_actions(&Err(AppError::WriteDenied)));
+        assert!(shows_actions(&Err(AppError::WriteRejected)));
+        assert!(shows_actions(&Err(AppError::NotFound)));
+        assert!(shows_actions(&Err(AppError::Network("timeout".into()))));
     }
 }

@@ -30,16 +30,16 @@ pub struct AzdoClient {
     http: reqwest::Client,
     pat: String,
     session: Session,
-    /// What this token is known to allow for work item writes; reset by a new token (client).
+    /// Whether this token is known to write work items; reset by a new token (client).
     work_write: Mutex<WriteAccess>,
 }
 
 /// Whether the token can write, as learned from Azure DevOps answers during this session.
+/// There is no remembered "denied": a refusal may concern one item only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WriteAccess {
     Unknown,
     Granted,
-    Denied,
 }
 
 impl AzdoClient {
