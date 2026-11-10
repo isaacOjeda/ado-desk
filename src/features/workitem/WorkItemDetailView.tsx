@@ -5,16 +5,19 @@ import { workItemTypeTone } from "../../lib/format";
 import { DetailHeader, Dot, ErrorBanner, OpenInBrowser } from "../../components/ui";
 import { workItemApi } from "./api";
 import { Discussion, LoadingBody, NotFoundBody, WorkItemForm, WorkItemMeta } from "./WorkItemSections";
+import { CommentBox, ReadOnlyHint, WorkItemActionsBar, useWriteAccess, type Me } from "./WorkItemActions";
 import "./workitem.css";
 
 export interface WorkItemDetailViewProps {
   /** Row the user clicked; use it to render the header instantly while details load. */
   workItem: WorkItem;
   onBack: () => void;
+  /** Signed-in user, offered as an assignee when Azure DevOps exposes their sign-in address. */
+  me: Me | null;
 }
 
 /** Container: loads the work item and its comments, then hands them to presentational sections. */
-export function WorkItemDetailView({ workItem, onBack }: WorkItemDetailViewProps) {
+export function WorkItemDetailView({ workItem, onBack, me }: WorkItemDetailViewProps) {
   const { id, project } = workItem;
   const fetchDetail = useCallback(() => workItemApi.get(id), [id]);
   const fetchComments = useCallback(() => workItemApi.comments(project, id), [project, id]);
@@ -23,6 +26,12 @@ export function WorkItemDetailView({ workItem, onBack }: WorkItemDetailViewProps
 
   const item = detail.data;
   const type = item?.workItemType ?? workItem.workItemType;
+  const { canWrite, deny } = useWriteAccess(item);
+  // After a write, read the item and its comments again (no optimistic updates).
+  const reloadAll = () => {
+    detail.reload();
+    comments.reload();
+  };
 
   return (
     <div className="detail">
@@ -44,6 +53,10 @@ export function WorkItemDetailView({ workItem, onBack }: WorkItemDetailViewProps
           changedAt={item?.changedAt ?? workItem.changedAt}
           changedBy={item?.changedBy}
         />
+        {item && canWrite === true && (
+          <WorkItemActionsBar item={item} me={me} onDenied={deny} onChanged={reloadAll} />
+        )}
+        {item && canWrite === false && <ReadOnlyHint />}
       </DetailHeader>
 
       <div className="detail-body">
@@ -67,6 +80,9 @@ export function WorkItemDetailView({ workItem, onBack }: WorkItemDetailViewProps
                 error={comments.error?.message ?? null}
                 fallbackCount={item.commentCount}
                 onRetry={comments.reload}
+                composer={
+                  canWrite === true ? <CommentBox item={item} onDenied={deny} onChanged={reloadAll} /> : undefined
+                }
               />
             }
           />

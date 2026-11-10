@@ -70,17 +70,21 @@ export function Discussion({
   error,
   fallbackCount,
   onRetry,
+  composer,
 }: {
   comments: WorkItemComment[] | null;
   loading: boolean;
   error: string | null;
   fallbackCount: number | null;
   onRetry: () => void;
+  /** New comment box, shown above the comments when the token can write. */
+  composer?: ReactNode;
 }) {
   const count = comments?.length ?? fallbackCount;
   return (
     <section className="section">
       <h2 className="section-title">Discussion{count !== null ? ` (${count})` : ""}</h2>
+      {composer}
       {error ? (
         <ErrorBanner message={error} onRetry={onRetry} />
       ) : loading && !comments ? (
