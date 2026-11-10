@@ -1,5 +1,6 @@
 // Pure theme helpers: catalog lookup, effective kind resolution and token -> CSS variable mapping.
 import type { AppearanceSettings, ThemeMode } from "../lib/settings";
+import { hasNativeGlass } from "../lib/platform";
 import builtin from "./builtin.json";
 import { DEFAULT_THEME_IDS, type Theme, type ThemeColors, type ThemeKind } from "./types";
 
@@ -72,11 +73,12 @@ export function themeCssVariables(colors: ThemeColors): Record<string, string> {
 }
 
 /**
- * Native vibrancy is only guaranteed on macOS. Elsewhere (Windows 10, Linux) a transparent
- * page would show the desktop through the window, so translucency stays off.
+ * Translucency needs a native material behind the page: vibrancy on macOS, Mica on Windows 11.
+ * Elsewhere (Windows 10, Linux) a transparent page would show the desktop through the window,
+ * so translucency stays off.
  */
-export function supportsTranslucency(userAgent: string = navigator.userAgent): boolean {
-  return /Macintosh|Mac OS X/i.test(userAgent);
+export function supportsTranslucency(): boolean {
+  return hasNativeGlass();
 }
 
 /** Most transparency each glass layer reaches at intensity 100. Reading panes keep the highest floor. */

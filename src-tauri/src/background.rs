@@ -60,6 +60,21 @@ pub fn install_tray(app: &AppHandle) -> tauri::Result<()> {
             QUIT => app.exit(0),
             _ => {}
         });
+    // Windows convention: a left click opens the app; the menu stays on the right click.
+    #[cfg(windows)]
+    {
+        use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
+        tray = tray.show_menu_on_left_click(false).on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_main(tray.app_handle());
+            }
+        });
+    }
     if let Some(icon) = app.default_window_icon() {
         tray = tray.icon(icon.clone());
     }

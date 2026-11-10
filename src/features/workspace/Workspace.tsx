@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ApiError, Session, WorkItem } from "../../lib/api";
 import { settingsApi } from "../../lib/settings";
 import { useResource } from "../../lib/useResource";
+import { MOD_KEY } from "../../lib/platform";
 import { ErrorBanner, Spinner } from "../../components/ui";
 import { Sidebar, type View } from "./Sidebar";
 import { WorkItemList } from "./WorkItemList";
@@ -198,7 +199,7 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
               </button>
             </>
           ) : (
-            <button className="btn btn-ghost" onClick={active.reload} disabled={active.loading} title="Refresh (⌘R)">
+            <button className="btn btn-ghost" onClick={active.reload} disabled={active.loading} title={`Refresh (${MOD_KEY}R)`}>
               {active.loading ? <Spinner /> : "↻"}
             </button>
           )}

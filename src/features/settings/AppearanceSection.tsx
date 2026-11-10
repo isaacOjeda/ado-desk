@@ -259,7 +259,7 @@ function GlassIntensity({
         </h3>
         <p className="appearance-hint">
           {disabled
-            ? "Available when translucency is on (macOS)."
+            ? "Available when translucency is on (macOS, Windows 11)."
             : "How much of the desktop shows through the window. Reading panes keep a higher opacity floor."}
         </p>
       </div>

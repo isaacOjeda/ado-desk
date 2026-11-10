@@ -16,7 +16,7 @@
   --reading-leading: 1.65;
   --reading-measure: 72ch;
 
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   font-size: 13px;
   line-height: 1.45;
   color: var(--text);
@@ -884,4 +884,10 @@ a {
 .comment-date {
   font-size: 12px;
   color: var(--text-faint);
+}
+
+/* Windows keeps the native title bar, so the traffic-light spacing is not needed. */
+:root[data-platform="windows"] .sidebar-top,
+:root[data-platform="windows"] .settings-nav-top {
+  height: 10px;
 }

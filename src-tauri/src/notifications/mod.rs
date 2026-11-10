@@ -74,16 +74,58 @@ fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64)
 }
 
-/// Broadcasts the Inbox and updates the unread badges (Dock and menu bar icon).
+/// Broadcasts the Inbox and updates the unread badges: the Dock and menu bar icon on macOS,
+/// a taskbar overlay dot on Windows (which supports neither badge counts nor tray titles),
+/// and the tray tooltip everywhere.
 pub fn publish(app: &AppHandle, inbox: &[InboxItem]) {
     let _ = app.emit(INBOX_CHANGED_EVENT, inbox);
     let unread = store::unread(inbox);
     if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
+        #[cfg(windows)]
+        let _ = window.set_overlay_icon(
+            (unread > 0).then(|| tauri::image::Image::new_owned(overlay_dot(OVERLAY_SIZE), OVERLAY_SIZE, OVERLAY_SIZE)),
+        );
+        #[cfg(not(windows))]
         let _ = window.set_badge_count((unread > 0).then_some(unread as i64));
     }
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        let _ = tray.set_tooltip(Some(tray_tooltip(unread)));
+        #[cfg(not(windows))]
         let _ = tray.set_title((unread > 0).then(|| unread.to_string()));
     }
+}
+
+/// Tray tooltip; the only unread hint on the Windows tray, which has no title text.
+fn tray_tooltip(unread: usize) -> String {
+    match unread {
+        0 => "ADO Desk".to_string(),
+        1 => "ADO Desk: 1 unread".to_string(),
+        n => format!("ADO Desk: {n} unread"),
+    }
+}
+
+/// Side of the Windows taskbar overlay icon, in pixels.
+#[cfg_attr(not(windows), allow(dead_code))]
+const OVERLAY_SIZE: u32 = 16;
+
+/// RGBA pixels of a filled red dot (`size` x `size`) with an anti-aliased edge, used as the
+/// Windows taskbar overlay that flags unread items.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn overlay_dot(size: u32) -> Vec<u8> {
+    const RED: [u8; 3] = [0xE8, 0x11, 0x23];
+    let center = size as f32 / 2.0;
+    let radius = center - 1.0;
+    let mut rgba = Vec::with_capacity((size * size * 4) as usize);
+    for y in 0..size {
+        for x in 0..size {
+            let dx = x as f32 + 0.5 - center;
+            let dy = y as f32 + 0.5 - center;
+            let coverage = (radius + 0.5 - (dx * dx + dy * dy).sqrt()).clamp(0.0, 1.0);
+            rgba.extend_from_slice(&RED);
+            rgba.push((coverage * 255.0).round() as u8);
+        }
+    }
+    rgba
 }
 
 fn signals(settings: &NotificationSettings) -> Signals {
@@ -231,4 +273,28 @@ pub fn mark_inbox_read(app: AppHandle, state: State<'_, NotificationsState>, id:
 #[tauri::command]
 pub fn check_notifications_now(state: State<'_, NotificationsState>) {
     state.wake();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tray_tooltip_shows_the_unread_count() {
+        assert_eq!(tray_tooltip(0), "ADO Desk");
+        assert_eq!(tray_tooltip(1), "ADO Desk: 1 unread");
+        assert_eq!(tray_tooltip(12), "ADO Desk: 12 unread");
+    }
+
+    #[test]
+    fn overlay_dot_is_an_opaque_disc_with_transparent_corners() {
+        let size = OVERLAY_SIZE;
+        let pixels = overlay_dot(size);
+        assert_eq!(pixels.len(), (size * size * 4) as usize);
+        let alpha = |x: u32, y: u32| pixels[((y * size + x) * 4 + 3) as usize];
+        assert_eq!(alpha(size / 2, size / 2), 255);
+        assert_eq!(alpha(0, 0), 0);
+        assert_eq!(alpha(size - 1, size - 1), 0);
+        assert_eq!(&pixels[0..3], &[0xE8, 0x11, 0x23]);
+    }
 }
