@@ -56,6 +56,9 @@ jobs:
       - name: Type check and build frontend
         run: pnpm build
 
+      - name: Release script tests
+        run: pnpm test:scripts
+
       - name: Clippy
         working-directory: src-tauri
         run: cargo clippy --all-targets -- -D warnings

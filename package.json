@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "app:install": "scripts/install-local.sh"
+    "app:install": "scripts/install-local.sh",
+    "test:scripts": "node --test \"scripts/*.test.mjs\""
   },
   "dependencies": {
     "react": "^19.1.0",

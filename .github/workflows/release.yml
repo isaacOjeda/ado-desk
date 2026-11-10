@@ -1,23 +1,56 @@
-# Builds ADO Desk for macOS (Apple Silicon, Intel) and Windows (x64).
-# - Manual run (workflow_dispatch): build only; installers are kept as run artifacts.
-# - Tag push (v*): build, then create a draft GitHub release with every installer.
+# Publishes a release for every push to main.
+# - plan: next version and release notes from the Conventional Commits since the latest v* tag
+#   (scripts/release-plan.mjs). Nothing to release when there are no new commits.
+# - build: macOS (Apple Silicon, Intel) and Windows (x64) installers, with the planned version
+#   injected at build time (the version in the repository files is not bumped).
+# - release: creates the tag on the pushed commit and a public GitHub release with the notes.
+# A manual run (workflow_dispatch) plans and builds only; installers are kept as run artifacts.
 name: Release
 
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# Runs one at a time, so each plan sees the tag of the previous release.
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
   cancel-in-progress: false
 
 jobs:
+  plan:
+    name: Plan release
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.plan.outputs.release }}
+      version: ${{ steps.plan.outputs.version }}
+      tag: ${{ steps.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - id: plan
+        run: node scripts/release-plan.mjs --notes-out release-notes.md
+
+      - if: steps.plan.outputs.release == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release-notes.md
+          if-no-files-found: error
+
   build:
     name: Build (${{ matrix.name }})
+    needs: plan
+    if: needs.plan.outputs.release == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -38,6 +71,7 @@ jobs:
             bundles: nsis
             installers: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -61,8 +95,15 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Set release version
+        shell: bash
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          printf '{ "version": "%s" }\n' "$VERSION" > release-version.json
+
       - name: Build installer
-        run: pnpm tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+        run: pnpm tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --config release-version.json
 
       - uses: actions/upload-artifact@v4
         with:
@@ -71,34 +112,31 @@ jobs:
           if-no-files-found: error
 
   release:
-    name: Draft release
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    name: Publish release
+    needs: [plan, build]
+    if: github.event_name == 'push' && needs.plan.outputs.release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Check tag matches app version
-        run: |
-          version="$(jq -r .version src-tauri/tauri.conf.json)"
-          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
-            echo "Tag ${GITHUB_REF_NAME} does not match tauri.conf.json version ${version}." >&2
-            exit 1
-          fi
-
       - uses: actions/download-artifact@v4
         with:
+          pattern: ado-desk-*
           path: installers
           merge-multiple: true
 
-      - name: Create draft release
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+
+      - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.plan.outputs.tag }}
+          VERSION: ${{ needs.plan.outputs.version }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" installers/* \
-            --draft \
-            --verify-tag \
-            --title "ADO Desk ${GITHUB_REF_NAME#v}" \
-            --notes-file .github/release-notes.md
+          gh release create "$TAG" installers/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "ADO Desk $VERSION" \
+            --notes-file release-notes.md
