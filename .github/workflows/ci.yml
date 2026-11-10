@@ -12,9 +12,10 @@ on:
 permissions:
   contents: read
 
+# A new push to a pull request cancels its previous run; every commit on main keeps its own result.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
@@ -28,6 +29,7 @@ jobs:
           - name: windows
             os: windows-latest
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
