@@ -19,13 +19,15 @@ use crate::AppState;
 use crate::azdo::AzdoClient;
 use crate::azdo::model::{self, ListResponse};
 use crate::commands::current_client;
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 
 const POLICY_API_VERSION: &str = "7.1-preview.1";
 /// Pull requests per `pull_request_check_summaries` call.
 pub const MAX_SUMMARIES: usize = 50;
 /// Concurrent requests per organization, as for notification comments.
 const CONCURRENCY: usize = 4;
+/// Each list target sends two requests at once (policies and builds).
+const TARGETS_AT_ONCE: usize = CONCURRENCY / 2;
 /// Builds read per branch query; only the newest per definition is kept.
 const BUILDS_PER_QUERY: &str = "50";
 const MAX_NAME_CHARS: usize = 100;
@@ -175,8 +177,6 @@ pub struct RawBuild {
     #[serde(default)]
     pub source_version: Option<String>,
     #[serde(default)]
-    pub queue_time: Option<String>,
-    #[serde(default)]
     pub finish_time: Option<String>,
 }
 
@@ -304,13 +304,8 @@ fn clean_name(name: &str, fallback: &str) -> String {
 
 /// Newest build per definition, newest first. `builds` may come from several queries.
 pub fn latest_per_definition(organization: &str, project: &str, mut builds: Vec<(BuildSource, RawBuild)>) -> Vec<BuildCheck> {
-    // ISO 8601 times sort as text; builds without a queue time go last.
-    builds.sort_by(|(_, a), (_, b)| match (&a.queue_time, &b.queue_time) {
-        (Some(a), Some(b)) => b.cmp(a),
-        (Some(_), None) => std::cmp::Ordering::Less,
-        (None, Some(_)) => std::cmp::Ordering::Greater,
-        (None, None) => std::cmp::Ordering::Equal,
-    });
+    // Build ids grow in queue order; `queueTime` text has a variable precision.
+    builds.sort_by_key(|(_, b)| std::cmp::Reverse(b.id));
     let mut seen_definitions = HashSet::new();
     let mut seen_builds = HashSet::new();
     builds
@@ -349,17 +344,45 @@ pub fn summarize(policies: Option<&[PolicyCheck]>, builds: Option<&[BuildCheck]>
     summary
 }
 
+/// Builds of the detail: pull request builds plus source-branch builds at `commit`. A failed
+/// merge-ref query (likely no Build (Read)) makes builds unavailable; a failed branch query only
+/// drops the branch builds.
+pub fn select_builds(
+    organization: &str,
+    project: &str,
+    merge: Option<Vec<RawBuild>>,
+    branch: Option<Vec<RawBuild>>,
+    commit: Option<&str>,
+) -> Option<Vec<BuildCheck>> {
+    let merge = merge?.into_iter().map(|b| (BuildSource::PullRequest, b));
+    let at_commit = branch
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|b| commit.is_some() && b.source_version.as_deref() == commit)
+        .map(|b| (BuildSource::Branch, b));
+    Some(latest_per_definition(organization, project, merge.chain(at_commit).collect()))
+}
+
+/// A pull request reference the frontend may send: positive id, bounded project, GUID-like
+/// repository id.
+pub fn is_valid_target(target: &CheckTarget) -> bool {
+    let repository = &target.repository_id;
+    target.id > 0
+        && !target.project.trim().is_empty()
+        && target.project.len() <= 256
+        && !repository.is_empty()
+        && repository.len() <= 64
+        && repository.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
+}
+
 /// Keeps targets that can name a repository, at most `MAX_SUMMARIES`.
 pub fn valid_targets(targets: Vec<CheckTarget>) -> Vec<CheckTarget> {
-    let is_repository_id = |id: &str| {
-        !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
-    };
-    targets
-        .into_iter()
-        .filter(|t| t.id > 0 && !t.project.trim().is_empty() && t.project.len() <= 256)
-        .filter(|t| is_repository_id(&t.repository_id))
-        .take(MAX_SUMMARIES)
-        .collect()
+    targets.into_iter().filter(is_valid_target).take(MAX_SUMMARIES).collect()
+}
+
+/// `Ok` value, or `None` with a log line naming only the error kind (never URLs or messages).
+fn available<T>(what: &str, result: AppResult<T>) -> Option<T> {
+    result.map_err(|err: AppError| eprintln!("checks: {what} unavailable ({})", err.kind())).ok()
 }
 
 // ---------------------------------------------------------------------------
@@ -402,10 +425,11 @@ async fn repository_project_id(client: &AzdoClient, project: &str, repository_id
 
 /// Policies and builds of one pull request for the detail view.
 async fn checks_of(client: &AzdoClient, project: &str, repository_id: &str, id: i64) -> PullRequestChecks {
+    const UNAVAILABLE: PullRequestChecks = PullRequestChecks { policies: None, builds: None, summary: CheckSummary::None };
     let org = client.org();
     let pr_url = crate::pull_requests::pr_url(client, project, repository_id, id, &[]);
-    let Ok(pr) = client.get_json::<RawCheckPullRequest>(pr_url).await else {
-        return PullRequestChecks { policies: None, builds: None, summary: CheckSummary::None };
+    let Some(pr) = available("pull request", client.get_json::<RawCheckPullRequest>(pr_url).await) else {
+        return UNAVAILABLE;
     };
     let commit = pr.last_merge_source_commit.map(|c| c.commit_id);
     let merge = merge_ref(id);
@@ -414,21 +438,14 @@ async fn checks_of(client: &AzdoClient, project: &str, repository_id: &str, id: 
         builds_of_branch(client, project, repository_id, &merge),
         builds_of_branch(client, project, repository_id, &pr.source_ref_name),
     );
-    let policies = evaluations.ok().map(|list| map_policies(org, project, list));
-    let builds = match (merge_builds, branch_builds) {
-        (Ok(merge_builds), Ok(branch_builds)) => {
-            let at_commit = branch_builds
-                .into_iter()
-                .filter(|b| commit.is_some() && b.source_version == commit);
-            let all = merge_builds
-                .into_iter()
-                .map(|b| (BuildSource::PullRequest, b))
-                .chain(at_commit.map(|b| (BuildSource::Branch, b)))
-                .collect();
-            Some(latest_per_definition(org, project, all))
-        }
-        _ => None,
-    };
+    let policies = available("policies", evaluations).map(|list| map_policies(org, project, list));
+    let builds = select_builds(
+        org,
+        project,
+        available("pull request builds", merge_builds),
+        available("branch builds", branch_builds),
+        commit.as_deref(),
+    );
     let summary = summarize(policies.as_deref(), builds.as_deref());
     PullRequestChecks { policies, builds, summary }
 }
@@ -438,18 +455,14 @@ async fn summary_of(client: &AzdoClient, target: &CheckTarget, project_id: Optio
     let org = client.org();
     let policies = async {
         match project_id {
-            Some(project_id) => evaluations(client, &target.project, project_id, target.id)
-                .await
-                .ok()
+            Some(project_id) => available("policies", evaluations(client, &target.project, project_id, target.id).await)
                 .map(|list| map_policies(org, &target.project, list)),
             None => None,
         }
     };
     let merge = merge_ref(target.id);
     let builds = async {
-        builds_of_branch(client, &target.project, &target.repository_id, &merge)
-            .await
-            .ok()
+        available("pull request builds", builds_of_branch(client, &target.project, &target.repository_id, &merge).await)
             .map(|list| {
                 let tagged = list.into_iter().map(|b| (BuildSource::PullRequest, b)).collect();
                 latest_per_definition(org, &target.project, tagged)
@@ -473,7 +486,11 @@ pub async fn get_pull_request_checks(
     id: i64,
 ) -> AppResult<PullRequestChecks> {
     let client = current_client(&state)?;
-    Ok(checks_of(&client, &project, &repository_id, id).await)
+    let target = CheckTarget { id, project, repository_id };
+    if !is_valid_target(&target) {
+        return Ok(PullRequestChecks { policies: None, builds: None, summary: CheckSummary::None });
+    }
+    Ok(checks_of(&client, &target.project, &target.repository_id, target.id).await)
 }
 
 /// The list dot of up to `MAX_SUMMARIES` pull requests of the active organization. Project ids
@@ -497,7 +514,7 @@ pub async fn pull_request_check_summaries(
         .map(|(project, repository_id)| {
             let client = &client;
             async move {
-                let id = repository_project_id(client, &project, &repository_id).await.ok();
+                let id = available("repository", repository_project_id(client, &project, &repository_id).await);
                 (repository_id, id)
             }
         })
@@ -515,7 +532,7 @@ pub async fn pull_request_check_summaries(
                 CheckSummaryItem { id: target.id, repository_id: target.repository_id, summary }
             }
         })
-        .buffer_unordered(CONCURRENCY)
+        .buffer_unordered(TARGETS_AT_ONCE)
         .collect()
         .await;
     Ok(summaries)
@@ -630,22 +647,61 @@ mod tests {
     fn only_the_newest_build_of_each_definition_is_kept() {
         let builds = vec![
             (BuildSource::PullRequest, build(json!({ "id": 3, "buildNumber": "20261110.3", "status": "inProgress", "definition": { "id": 1, "name": "ci" }, "queueTime": "2026-11-10T10:00:00Z" }))),
-            (BuildSource::PullRequest, build(json!({ "id": 2, "buildNumber": "20261110.2", "status": "completed", "result": "failed", "definition": { "id": 1, "name": "ci" }, "queueTime": "2026-11-10T09:00:00Z" }))),
-            (BuildSource::Branch, build(json!({ "id": 5, "buildNumber": "7", "status": "completed", "result": "succeeded", "definition": { "id": 2, "name": "lint" }, "queueTime": "2026-11-10T11:00:00Z", "finishTime": "2026-11-10T11:05:00Z" }))),
+            (BuildSource::PullRequest, build(json!({ "id": 2, "buildNumber": "20261110.2", "status": "completed", "result": "failed", "definition": { "id": 1, "name": "ci" }, "queueTime": "2026-11-10T10:00:00.5Z" }))),
+            (BuildSource::Branch, build(json!({ "id": 5, "buildNumber": "7", "status": "completed", "result": "succeeded", "definition": { "id": 2, "name": "lint" }, "finishTime": "2026-11-10T11:05:00Z" }))),
             (BuildSource::Branch, build(json!({ "id": 4, "status": "completed", "result": "succeeded" }))),
+            (BuildSource::Branch, build(json!({ "id": 5, "status": "completed", "result": "failed", "definition": { "id": 2, "name": "lint" } }))),
         ];
 
         let latest = latest_per_definition("contoso", "Web", builds);
 
+        // Build ids grow with queue order, so the highest id per definition is the newest,
+        // whatever the precision of `queueTime`.
         let ids: Vec<i64> = latest.iter().map(|b| b.id).collect();
-        assert_eq!(ids, vec![5, 3, 4]);
+        assert_eq!(ids, vec![5, 4, 3]);
         assert_eq!(latest[0].definition, "lint");
         assert_eq!(latest[0].source, BuildSource::Branch);
+        assert_eq!(latest[0].state, CheckState::Succeeded);
         assert_eq!(latest[0].finished_at.as_deref(), Some("2026-11-10T11:05:00Z"));
-        assert_eq!(latest[1].state, CheckState::Running);
-        assert_eq!(latest[1].url, "https://dev.azure.com/contoso/Web/_build/results?buildId=3");
-        assert_eq!(latest[2].definition, "Build");
-        assert_eq!(latest[2].number, "");
+        assert_eq!(latest[1].definition, "Build");
+        assert_eq!(latest[1].number, "");
+        assert_eq!(latest[2].state, CheckState::Running);
+        assert_eq!(latest[2].url, "https://dev.azure.com/contoso/Web/_build/results?buildId=3");
+    }
+
+    #[test]
+    fn detail_builds_keep_branch_ci_at_the_latest_commit_and_degrade_per_query() {
+        let merge = || vec![build(json!({ "id": 10, "status": "completed", "result": "failed", "definition": { "id": 1, "name": "validation" } }))];
+        let branch = || {
+            vec![
+                build(json!({ "id": 12, "status": "completed", "result": "succeeded", "definition": { "id": 2, "name": "ci" }, "sourceVersion": "abc" })),
+                build(json!({ "id": 11, "status": "completed", "result": "succeeded", "definition": { "id": 3, "name": "old" }, "sourceVersion": "old" })),
+            ]
+        };
+        let ids = |builds: Option<Vec<BuildCheck>>| builds.map(|list| list.iter().map(|b| b.id).collect::<Vec<_>>());
+
+        assert_eq!(ids(select_builds("o", "p", Some(merge()), Some(branch()), Some("abc"))), Some(vec![12, 10]));
+        assert_eq!(ids(select_builds("o", "p", Some(merge()), Some(branch()), None)), Some(vec![10]));
+        assert_eq!(ids(select_builds("o", "p", Some(merge()), None, Some("abc"))), Some(vec![10]));
+        assert_eq!(ids(select_builds("o", "p", None, Some(branch()), Some("abc"))), None);
+        let sources: Vec<BuildSource> = select_builds("o", "p", Some(merge()), Some(branch()), Some("abc"))
+            .unwrap()
+            .iter()
+            .map(|b| b.source)
+            .collect();
+        assert_eq!(sources, vec![BuildSource::Branch, BuildSource::PullRequest]);
+    }
+
+    #[test]
+    fn detail_and_list_targets_share_one_validation() {
+        let target = |id: i64, project: &str, repository_id: &str| CheckTarget { id, project: project.into(), repository_id: repository_id.into() };
+        let repo = "3411ebc1-d5aa-464f-9615-0b527bc66719";
+        assert!(is_valid_target(&target(1, "Web", repo)));
+        assert!(!is_valid_target(&target(0, "Web", repo)));
+        assert!(!is_valid_target(&target(1, "  ", repo)));
+        assert!(!is_valid_target(&target(1, &"p".repeat(257), repo)));
+        assert!(!is_valid_target(&target(1, "Web", "../_apis")));
+        assert!(!is_valid_target(&target(1, "Web", &"a".repeat(65))));
     }
 
     #[test]

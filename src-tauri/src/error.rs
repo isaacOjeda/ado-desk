@@ -34,7 +34,7 @@ pub enum AppError {
 }
 
 impl AppError {
-    fn kind(&self) -> &'static str {
+    pub(crate) fn kind(&self) -> &'static str {
         match self {
             AppError::InvalidOrganization => "invalidOrganization",
             AppError::Unauthorized => "unauthorized",
