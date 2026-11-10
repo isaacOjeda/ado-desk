@@ -105,11 +105,8 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
     useCallback(() => filtersApi.queryPullRequests(pullRequestFilter), [organization, pullRequestFilter]),
   );
   const projects = useResource(useCallback(() => filtersApi.listProjects(), [organization]));
-  // Dots for active pull requests, loaded after the list renders.
-  const checkSummaries = useCheckSummaries(
-    organization,
-    pullRequests.data?.filter((pr) => pr.status === "active") ?? null,
-  );
+  // Dots for active pull requests, loaded after each list fetch.
+  const checkSummaries = useCheckSummaries(organization, pullRequests.data);
   const [allViews, acceptViews] = useSavedViews();
   const [viewError, setViewError] = useState<string | null>(null);
   const views = useMemo(() => viewsFor(allViews ?? [], organization), [allViews, organization]);

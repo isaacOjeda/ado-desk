@@ -1,6 +1,6 @@
 // Build and policy status of pull requests; mirrors `src-tauri/src/checks.rs`.
 import { useEffect, useState } from "react";
-import { call } from "../../lib/api";
+import { call, type PullRequest } from "../../lib/api";
 import type { Tone } from "../../lib/format";
 
 export type CheckState = "succeeded" | "failed" | "running" | "queued" | "partial" | "canceled";
@@ -87,16 +87,21 @@ export function summaryDot(summary: CheckSummary | undefined): { label: string; 
 }
 
 /**
- * List dots of the given pull requests, keyed by `checkKey`. Loaded after the list renders and
- * refetched only when the organization or the set of pull requests changes. Failures leave the
- * list without dots.
+ * List dots of the active pull requests in `pullRequests`, keyed by `checkKey`. Loaded after the
+ * list renders and again whenever the list is fetched (filters, organization or Refresh), since
+ * `useResource` hands out a new array per fetch. Failures leave the list without dots.
  */
-export function useCheckSummaries(organization: string, targets: CheckTarget[] | null): Map<string, CheckSummary> {
+export function useCheckSummaries(
+  organization: string,
+  pullRequests: (PullRequest & { status: string })[] | null,
+): Map<string, CheckSummary> {
   const [summaries, setSummaries] = useState<Map<string, CheckSummary>>(() => new Map());
-  const limited = (targets ?? []).slice(0, MAX_SUMMARIES);
-  const key = `${organization}|${limited.map((t) => checkKey(t.repositoryId, t.id)).join(",")}`;
 
   useEffect(() => {
+    const limited: CheckTarget[] = (pullRequests ?? [])
+      .filter((pr) => pr.status === "active")
+      .slice(0, MAX_SUMMARIES)
+      .map(({ id, project, repositoryId }) => ({ id, project, repositoryId }));
     if (limited.length === 0) {
       setSummaries(new Map());
       return;
@@ -111,8 +116,7 @@ export function useCheckSummaries(organization: string, targets: CheckTarget[] |
     return () => {
       active = false;
     };
-    // `key` captures organization and the target list; `limited` is rebuilt every render.
-  }, [key]);
+  }, [organization, pullRequests]);
 
   return summaries;
 }

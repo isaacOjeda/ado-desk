@@ -310,7 +310,7 @@ pub fn latest_per_definition(organization: &str, project: &str, mut builds: Vec<
     let mut seen_builds = HashSet::new();
     builds
         .into_iter()
-        .filter(|(_, b)| seen_builds.insert(b.id))
+        .filter(|(_, b)| b.id > 0 && seen_builds.insert(b.id))
         .filter(|(_, b)| b.definition.as_ref().is_none_or(|d| seen_definitions.insert(d.id)))
         .map(|(source, b)| BuildCheck {
             id: b.id,
@@ -375,6 +375,11 @@ pub fn is_valid_target(target: &CheckTarget) -> bool {
         && repository.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
 }
 
+/// Items of a list response that decode; one malformed item never hides the others.
+pub fn lenient<T: serde::de::DeserializeOwned>(items: Vec<Value>) -> Vec<T> {
+    items.into_iter().filter_map(|item| serde_json::from_value(item).ok()).collect()
+}
+
 /// Keeps targets that can name a repository, at most `MAX_SUMMARIES`.
 pub fn valid_targets(targets: Vec<CheckTarget>) -> Vec<CheckTarget> {
     targets.into_iter().filter(is_valid_target).take(MAX_SUMMARIES).collect()
@@ -393,8 +398,8 @@ async fn evaluations(client: &AzdoClient, project: &str, project_id: &str, id: i
     let mut url = client.url_with_version(&[project, "_apis", "policy", "evaluations"], POLICY_API_VERSION);
     url.query_pairs_mut()
         .append_pair("artifactId", &format!("vstfs:///CodeReview/CodeReviewId/{project_id}/{id}"));
-    let list: ListResponse<RawEvaluation> = client.get_json(url).await?;
-    Ok(list.value)
+    let list: ListResponse<Value> = client.get_json(url).await?;
+    Ok(lenient(list.value))
 }
 
 async fn builds_of_branch(client: &AzdoClient, project: &str, repository_id: &str, branch: &str) -> AppResult<Vec<RawBuild>> {
@@ -405,8 +410,8 @@ async fn builds_of_branch(client: &AzdoClient, project: &str, repository_id: &st
         .append_pair("repositoryType", "TfsGit")
         .append_pair("queryOrder", "queueTimeDescending")
         .append_pair("$top", BUILDS_PER_QUERY);
-    let list: ListResponse<RawBuild> = client.get_json(url).await?;
-    Ok(list.value)
+    let list: ListResponse<Value> = client.get_json(url).await?;
+    Ok(lenient(list.value))
 }
 
 fn merge_ref(id: i64) -> String {
@@ -690,6 +695,44 @@ mod tests {
             .map(|b| b.source)
             .collect();
         assert_eq!(sources, vec![BuildSource::Branch, BuildSource::PullRequest]);
+    }
+
+    #[test]
+    fn one_malformed_item_does_not_hide_the_rest_of_a_list() {
+        let builds: Vec<RawBuild> = lenient(vec![
+            json!({ "id": 1, "status": "completed", "result": "succeeded" }),
+            json!({ "status": "completed" }),
+            json!({ "id": 2, "definition": { "name": "no id" } }),
+            json!("text"),
+            json!({ "id": 3 }),
+        ]);
+        assert_eq!(builds.iter().map(|b| b.id).collect::<Vec<_>>(), vec![1, 3]);
+
+        let evaluations: Vec<RawEvaluation> = lenient(vec![
+            json!({ "status": "approved", "configuration": { "isBlocking": "yes" } }),
+            json!({ "status": "rejected" }),
+        ]);
+        assert_eq!(evaluations.len(), 1);
+    }
+
+    #[test]
+    fn builds_without_a_positive_id_are_dropped() {
+        let builds = vec![
+            (BuildSource::PullRequest, build(json!({ "id": 0, "status": "completed", "result": "failed" }))),
+            (BuildSource::PullRequest, build(json!({ "id": -4, "status": "completed", "result": "failed" }))),
+            (BuildSource::PullRequest, build(json!({ "id": 9, "status": "completed", "result": "succeeded" }))),
+        ];
+        let ids: Vec<i64> = latest_per_definition("o", "p", builds).iter().map(|b| b.id).collect();
+        assert_eq!(ids, vec![9]);
+    }
+
+    #[test]
+    fn names_drop_every_bidi_and_separator_format_character() {
+        let list = vec![evaluation(json!({
+            "status": "approved",
+            "configuration": { "type": { "displayName": "a\u{061c}b\u{2028}c\u{2029}d\u{180e}e\u{202e}f" } }
+        }))];
+        assert_eq!(map_policies("o", "p", list)[0].name, "abcdef");
     }
 
     #[test]

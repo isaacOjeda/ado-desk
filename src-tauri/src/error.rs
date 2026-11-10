@@ -8,7 +8,7 @@ pub enum AppError {
     InvalidOrganization,
     #[error("The personal access token is invalid or expired")]
     Unauthorized,
-    #[error("The token lacks the required scopes (Work Items, Code, Project and Team: Read; Build: Read for build status)")]
+    #[error("The token lacks the required scopes (Work Items, Code, Project and Team: Read). Build (Read) is optional, for build status")]
     Forbidden,
     #[error("Resource not found")]
     NotFound,
