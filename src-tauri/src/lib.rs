@@ -1,5 +1,6 @@
 mod azdo;
 mod background;
+mod checks;
 mod commands;
 mod credentials;
 mod error;
@@ -99,6 +100,8 @@ pub fn run() {
             pull_requests::list_pull_request_threads,
             pull_requests::list_pull_request_files,
             pull_requests::get_pull_request_file_diff,
+            checks::get_pull_request_checks,
+            checks::pull_request_check_summaries,
             queries::query_work_items,
             queries::query_pull_requests,
             queries::list_projects,
