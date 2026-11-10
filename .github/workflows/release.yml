@@ -28,6 +28,7 @@ jobs:
       release: ${{ steps.plan.outputs.release }}
       version: ${{ steps.plan.outputs.version }}
       tag: ${{ steps.plan.outputs.tag }}
+      build_version: ${{ steps.plan.outputs.build_version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -50,7 +51,8 @@ jobs:
   build:
     name: Build (${{ matrix.name }})
     needs: plan
-    if: needs.plan.outputs.release == 'true'
+    # A manual run always builds, even with nothing new to release (it then uses the current version).
+    if: needs.plan.outputs.release == 'true' || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
@@ -98,7 +100,7 @@ jobs:
       - name: Set release version
         shell: bash
         env:
-          VERSION: ${{ needs.plan.outputs.version }}
+          VERSION: ${{ needs.plan.outputs.build_version }}
         run: |
           printf '{ "version": "%s" }\n' "$VERSION" > release-version.json
 

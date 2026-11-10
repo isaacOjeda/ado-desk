@@ -3,7 +3,7 @@
 //
 //   node scripts/release-plan.mjs --notes-out release-notes.md
 //
-// Prints `version`, `tag` and `release` (true/false) as `key=value` lines and appends them to
+// Prints `release` (true/false), `version`, `tag` and `build_version` as `key=value` lines and appends them to
 // $GITHUB_OUTPUT when it is set. Pure logic is exported for scripts/release-plan.test.mjs.
 import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
@@ -107,7 +107,13 @@ function main(argv) {
   // Without any tag yet, the version in tauri.conf.json is the first release.
   const version = tag ? nextVersion(current, commits) : current;
 
-  const outputs = { release: String(version !== null), version: version ?? "", tag: version ? `v${version}` : "" };
+  const outputs = {
+    release: String(version !== null),
+    version: version ?? "",
+    tag: version ? `v${version}` : "",
+    // Version a build-only (manual) run uses when there is nothing new to release.
+    build_version: version ?? current,
+  };
   if (version) {
     const template = readFileSync(new URL("../.github/release-notes.md", import.meta.url), "utf8");
     const notes = renderNotes({ version, previousTag: tag, repository: process.env.GITHUB_REPOSITORY, commits, template });
