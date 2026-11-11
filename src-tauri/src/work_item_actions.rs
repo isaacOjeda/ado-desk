@@ -51,7 +51,8 @@ pub fn comment_html(input: &str) -> AppResult<String> {
 
 /// Plain text of a stored comment, when the app can edit it without dropping anything: HTML
 /// format (not markdown), no tags but `<br>`, only the entities [`comment_html`] writes, and
-/// text a new comment would accept. Formatting, mentions or markdown give `None`.
+/// text a new comment would accept unchanged (no leading or trailing whitespace). Formatting,
+/// mentions or markdown give `None`.
 pub fn editable_comment_text(text: &str, format: Option<&str>) -> Option<String> {
     if format.is_some_and(|f| !f.eq_ignore_ascii_case("html")) {
         return None;
@@ -84,7 +85,8 @@ pub fn editable_comment_text(text: &str, format: Option<&str>) -> Option<String>
         };
         rest = &rest[taken..];
     }
-    comment_html(&plain).is_ok().then_some(plain)
+    // A save trims, so leading or trailing whitespace would be lost.
+    (plain.trim() == plain && comment_html(&plain).is_ok()).then_some(plain)
 }
 
 const LINE_BREAKS: [&str; 3] = ["<br>", "<br/>", "<br />"];
@@ -979,6 +981,122 @@ mod verifier_probes {
                 "{crafted}"
             );
             assert!(url.query().is_none() && url.fragment().is_none());
+        }
+    }
+}
+
+#[cfg(test)]
+mod comment_edit_probes {
+    use super::*;
+
+    struct Lcg(u64);
+    impl Lcg {
+        fn next(&mut self) -> usize {
+            self.0 = self
+                .0
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (self.0 >> 33) as usize
+        }
+    }
+
+    const TOKENS: &[&str] = &[
+        "<br>", "<BR>", "<br/>", "<Br />", "<br />", "<brx>", "<br", "<b>", "<", ">", "&amp;",
+        "&AMP;", "&amp", "&lt;", "&gt;", "&quot;", "&#39;", "&#39", "&#x27;", "&apos;", "&nbsp;",
+        "&", "\"", "'", "\n", "\r", "\t", " ", "  ", "a", "Z", "é", "日本", "😀", "\u{200b}",
+        "\u{2028}", "\u{feff}", "\u{a0}", "\u{85}", "\u{3000}", "<日", "&日", "<br日", "<div>",
+        "</div>",
+    ];
+
+    fn clean_trim(x: &str) -> String {
+        let cleaned: String = x
+            .chars()
+            .filter(|c| (*c == '\n' || !c.is_control()) && !is_format_char(*c))
+            .collect();
+        cleaned.trim().to_string()
+    }
+
+    fn strip_edges(html: &str) -> String {
+        let mut s = html.trim().to_string();
+        loop {
+            let before = s.clone();
+            for br in ["<br>", "&nbsp;"] {
+                if let Some(r) = s.strip_prefix(br) {
+                    s = r.trim_start().to_string();
+                }
+                if let Some(r) = s.strip_suffix(br) {
+                    s = r.trim_end().to_string();
+                }
+            }
+            s = s.trim_matches(|c: char| c.is_whitespace()).to_string();
+            if s == before {
+                return s;
+            }
+        }
+    }
+
+    #[test]
+    fn probe_fuzz_editable_round_trip_and_render_equivalence() {
+        let mut rng = Lcg(0x5eed);
+        let mut some = 0;
+        for _ in 0..60_000 {
+            let n = rng.next() % 10;
+            let s: String = (0..n).map(|_| TOKENS[rng.next() % TOKENS.len()]).collect();
+            for fmt in [None, Some("html"), Some("HTML")] {
+                if let Some(p) = editable_comment_text(&s, fmt) {
+                    some += 1;
+                    let re = comment_html(&p).expect("Some implies comment_html accepts");
+                    assert_eq!(
+                        editable_comment_text(&re, None).as_deref(),
+                        Some(p.trim()),
+                        "idempotence {s:?}"
+                    );
+                    let a = crate::rich_text::sanitize_html(&s, "org");
+                    let b = crate::rich_text::sanitize_html(&re, "org");
+                    assert_eq!(
+                        strip_edges(&a),
+                        strip_edges(&b),
+                        "render differs for stored {s:?}"
+                    );
+                }
+            }
+            // Every accepted new comment is editable back to its cleaned, trimmed text.
+            if let Ok(html) = comment_html(&s) {
+                assert_eq!(
+                    editable_comment_text(&html, None).as_deref(),
+                    Some(clean_trim(&s).as_str()),
+                    "round trip {s:?}"
+                );
+            }
+        }
+        assert!(some > 200, "fuzz produced too few editable cases: {some}");
+    }
+
+    #[test]
+    fn probe_specific_inputs() {
+        for stored in [
+            "<brx>",
+            "a<br",
+            "a<br/ >b",
+            "a&#39b",
+            "a&AMP;b",
+            "<日本",
+            "&日",
+            "a\tb",
+            "a\rb",
+            "a\u{200b}b",
+            "a&nbsp;",
+        ] {
+            assert_eq!(editable_comment_text(stored, None), None, "{stored:?}");
+        }
+        assert_eq!(editable_comment_text("plain", Some("")), None);
+        assert_eq!(
+            editable_comment_text("a > b \" c ' d", None).as_deref(),
+            Some("a > b \" c ' d")
+        );
+        // A resave trims, so text with leading or trailing whitespace is not offered.
+        for stored in ["<br>hi", "hi<br>", "\u{a0}hi", "hi ", " hi"] {
+            assert_eq!(editable_comment_text(stored, None), None, "{stored:?}");
         }
     }
 }

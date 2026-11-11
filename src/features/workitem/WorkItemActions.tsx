@@ -67,7 +67,7 @@ function useWrite(onDenied: () => void, onChanged: () => void) {
     }
   };
 
-  return { busy, error, run };
+  return { busy, error, run, clearError: () => setError(null) };
 }
 
 export function ReadOnlyHint() {
@@ -192,6 +192,7 @@ function CommentEditor({
   busy,
   error,
   label,
+  placeholder,
   submitLabel,
   busyLabel,
   onSubmit,
@@ -202,6 +203,7 @@ function CommentEditor({
   busy: boolean;
   error: string | null;
   label: string;
+  placeholder: string;
   submitLabel: string;
   busyLabel: string;
   onSubmit: () => void;
@@ -219,7 +221,7 @@ function CommentEditor({
       <textarea
         value={text}
         onChange={(e) => onText(e.target.value)}
-        placeholder="Add a comment"
+        placeholder={placeholder}
         rows={3}
         disabled={busy}
         aria-label={label}
@@ -273,6 +275,7 @@ export function CommentBox({
       busy={busy}
       error={error}
       label="New comment"
+      placeholder="Add a comment"
       submitLabel="Comment"
       busyLabel="Posting…"
       onSubmit={() => void submit()}
@@ -300,8 +303,12 @@ export function OwnComment({
 }) {
   const [mode, setMode] = useState<"view" | "edit" | "confirmDelete">("view");
   const [text, setText] = useState("");
-  const { busy, error, run } = useWrite(onDenied, onChanged);
+  const { busy, error, run, clearError } = useWrite(onDenied, onChanged);
   const editable = comment.editableText;
+  const leave = () => {
+    clearError();
+    setMode("view");
+  };
 
   const attempt = async (write: () => Promise<void>) => {
     if (await run(write)) setMode("view");
@@ -316,10 +323,11 @@ export function OwnComment({
         busy={busy}
         error={error}
         label="Edit comment"
+        placeholder="Comment text"
         submitLabel="Save"
         busyLabel="Saving…"
         onSubmit={() => void attempt(() => workItemActionsApi.updateComment(item, comment, text))}
-        onCancel={() => setMode("view")}
+        onCancel={leave}
       />
     ) : undefined;
 
@@ -332,7 +340,7 @@ export function OwnComment({
         {mode === "confirmDelete" ? (
           <div className="wi-confirm wi-comment-actions" role="group" aria-label="Confirm deleting the comment">
             <span>Delete this comment?</span>
-            <button className="btn btn-ghost btn-sm" onClick={() => setMode("view")} disabled={busy}>
+            <button className="btn btn-ghost btn-sm" onClick={leave} disabled={busy}>
               Cancel
             </button>
             <button
