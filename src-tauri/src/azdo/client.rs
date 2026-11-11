@@ -1,7 +1,9 @@
 //! Thin HTTP adapter over the Azure DevOps REST API (api-version 7.1).
 
 use futures::{FutureExt, StreamExt, future::BoxFuture, stream};
-use reqwest::{RequestBuilder, StatusCode, header::HeaderMap, redirect};
+use std::sync::Mutex;
+
+use reqwest::{Method, RequestBuilder, StatusCode, header::{CONTENT_TYPE, HeaderMap}, redirect};
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use url::Url;
@@ -28,6 +30,16 @@ pub struct AzdoClient {
     http: reqwest::Client,
     pat: String,
     session: Session,
+    /// Whether this token is known to write work items; reset by a new token (client).
+    work_write: Mutex<WriteAccess>,
+}
+
+/// Whether the token can write, as learned from Azure DevOps answers during this session.
+/// There is no remembered "denied": a refusal may concern one item only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WriteAccess {
+    Unknown,
+    Granted,
 }
 
 impl AzdoClient {
@@ -55,6 +67,7 @@ impl AzdoClient {
             http,
             pat: pat.to_string(),
             session: model::session_from(organization, data),
+            work_write: Mutex::new(WriteAccess::Unknown),
         })
     }
 
@@ -93,6 +106,26 @@ impl AzdoClient {
     pub(crate) async fn post_json<T: DeserializeOwned>(&self, url: Url, body: &Value) -> AppResult<T> {
         let request = self.http.post(url).basic_auth("", Some(&self.pat)).json(body);
         send::<T>(request).await.map(|(value, _)| value)
+    }
+
+    pub(crate) fn work_write_access(&self) -> WriteAccess {
+        *self.work_write.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    pub(crate) fn record_work_write_access(&self, access: WriteAccess) {
+        *self.work_write.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = access;
+    }
+
+    /// Authenticated write (POST, PATCH, DELETE), with a body of the given content type or
+    /// none. The response body is not decoded: once Azure DevOps accepted a change, a
+    /// surprising body must not report it as failed. Failures map through
+    /// [`write_status_error`], never to `Unauthorized`.
+    pub(crate) async fn write(&self, method: Method, url: Url, body: Option<WriteBody<'_>>) -> AppResult<()> {
+        let response = write_request(&self.http, &self.pat, method, url, body)?.send().await?;
+        match write_status_error(response.status()) {
+            Some(err) => Err(err),
+            None => Ok(()),
+        }
     }
 
     /// Authenticated GET returning the raw body and its content type (attachments, file blobs).
@@ -341,6 +374,55 @@ async fn send<T: DeserializeOwned>(request: RequestBuilder) -> AppResult<(T, Hea
         .map_err(|err| AppError::Decode(err.to_string()))
 }
 
+/// A write body: the JSON value and the content type it is sent as.
+pub(crate) type WriteBody<'a> = (&'a Value, &'static str);
+
+/// The request of [`AzdoClient::write`]. Without a body nothing is sent, not even a
+/// Content-Type (a DELETE carries no `null`).
+pub(crate) fn write_request(
+    http: &reqwest::Client,
+    pat: &str,
+    method: Method,
+    url: Url,
+    body: Option<WriteBody<'_>>,
+) -> AppResult<RequestBuilder> {
+    let request = http.request(method, url).basic_auth("", Some(pat));
+    Ok(match body {
+        Some((value, content_type)) => {
+            let bytes = serde_json::to_vec(value).map_err(|err| AppError::Decode(err.to_string()))?;
+            request.header(CONTENT_TYPE, content_type).body(bytes)
+        }
+        None => request,
+    })
+}
+
+/// The error of a write answered with `status`, or `None` when the write was accepted.
+/// A token without a write scope may be answered 401 (or 203, or a redirect to sign-in) as
+/// well as 403; all of them mean "no write access" here, so a write never signs the user out.
+/// Server text is dropped: it may quote the rejected value.
+pub(crate) fn write_status_error(status: StatusCode) -> Option<AppError> {
+    let denied = status == StatusCode::UNAUTHORIZED
+        || status == StatusCode::FORBIDDEN
+        || status == StatusCode::NON_AUTHORITATIVE_INFORMATION
+        || status.is_redirection();
+    if denied {
+        return Some(AppError::WriteDenied);
+    }
+    if status.is_success() {
+        return None;
+    }
+    Some(match status {
+        StatusCode::NOT_FOUND => AppError::NotFound,
+        StatusCode::BAD_REQUEST | StatusCode::CONFLICT | StatusCode::PRECONDITION_FAILED => {
+            AppError::WriteRejected
+        }
+        _ => AppError::Api {
+            status: status.as_u16(),
+            message: "the change was not saved".into(),
+        },
+    })
+}
+
 /// Extracts `message` from an Azure DevOps error body, or a short excerpt otherwise.
 fn api_message(body: &str) -> String {
     serde_json::from_str::<Value>(body)
@@ -351,7 +433,79 @@ fn api_message(body: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::api_message;
+    use super::{Method, StatusCode, api_message, write_request, write_status_error};
+    use crate::error::AppError;
+    use reqwest::header::CONTENT_TYPE;
+    use serde_json::json;
+
+    fn built(body: Option<(&serde_json::Value, &'static str)>) -> reqwest::Request {
+        let url = url::Url::parse("https://dev.azure.com/contoso/p/_apis/x").unwrap();
+        write_request(&reqwest::Client::new(), "pat", Method::DELETE, url, body)
+            .unwrap()
+            .build()
+            .unwrap()
+    }
+
+    #[test]
+    fn write_request_without_body_sends_no_body_or_content_type() {
+        let request = built(None);
+        assert_eq!(request.method(), Method::DELETE);
+        assert!(request.body().is_none());
+        assert!(request.headers().get(CONTENT_TYPE).is_none());
+        assert!(request.headers().get("authorization").is_some());
+    }
+
+    #[test]
+    fn write_request_with_body_sends_json_and_its_content_type() {
+        let value = json!({ "text": "hi" });
+        let request = built(Some((&value, "application/json")));
+        assert_eq!(request.headers()[CONTENT_TYPE], "application/json");
+        assert_eq!(request.body().and_then(|b| b.as_bytes()), Some(&br#"{"text":"hi"}"#[..]));
+    }
+
+    #[test]
+    fn write_status_error_never_signs_out() {
+        for code in [401, 403, 203, 302, 307] {
+            let status = StatusCode::from_u16(code).unwrap();
+            assert!(matches!(write_status_error(status), Some(AppError::WriteDenied)), "{code}");
+        }
+    }
+
+    #[test]
+    fn write_status_error_maps_rejections_to_fixed_text() {
+        for code in [400, 409, 412] {
+            let status = StatusCode::from_u16(code).unwrap();
+            assert!(matches!(write_status_error(status), Some(AppError::WriteRejected)), "{code}");
+        }
+        assert!(matches!(write_status_error(StatusCode::NOT_FOUND), Some(AppError::NotFound)));
+        let server = write_status_error(StatusCode::INTERNAL_SERVER_ERROR).unwrap();
+        assert_eq!(server.to_string(), "Azure DevOps returned HTTP 500: the change was not saved");
+        for code in [200, 201, 204] {
+            assert!(write_status_error(StatusCode::from_u16(code).unwrap()).is_none(), "{code}");
+        }
+    }
+
+    /// Every status a write can get: never `Unauthorized`/`Forbidden` (no sign-out), and only
+    /// fixed text in the message.
+    #[test]
+    fn write_status_error_sweep_never_signs_out_or_echoes() {
+        for code in 100u16..600 {
+            let Ok(status) = StatusCode::from_u16(code) else { continue };
+            match write_status_error(status) {
+                None => assert!((200..300).contains(&code) && code != 203, "{code} accepted"),
+                Some(AppError::WriteDenied) => {
+                    assert!(matches!(code, 401 | 403 | 203 | 300..=399), "{code} denied")
+                }
+                Some(AppError::WriteRejected) => assert!(matches!(code, 400 | 409 | 412), "{code}"),
+                Some(AppError::NotFound) => assert_eq!(code, 404),
+                Some(AppError::Api { status, message }) => {
+                    assert_eq!(status, code);
+                    assert_eq!(message, "the change was not saved");
+                }
+                Some(other) => panic!("{code}: unexpected {other:?}"),
+            }
+        }
+    }
 
     #[test]
     fn api_message_prefers_json_message() {

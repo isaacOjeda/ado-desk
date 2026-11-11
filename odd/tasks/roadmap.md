@@ -13,7 +13,7 @@ Order is by dependency first, then value. Update the Status cell; never delete a
 | 2 | Background mode + global floating search bar | 1 | none | 5 (new plugin deps) | Done (main 1f5afb0, 2026-11-07) |
 | 3 | Notifications for what needs you | 2 | none | 4 (polling, async ordering) | Done (main 3e32270, 2026-11-07) |
 | 4 | Saved views | — | none | 3 (persisted settings shape) | Done (main 8da5c63, 2026-11-10) |
-| 5 | Build and policy status on PRs | — | Build (Read), optional | 2 (PAT scope, `Forbidden` message) | Implemented on feat/pr-checks, pending merge (2026-11-10) |
+| 5 | Build and policy status on PRs | — | Build (Read), optional | 2 (PAT scope, `Forbidden` message) | Done (main a04220f, 2026-11-10) |
 | 6 | Write actions | 5 | Work Items + Code (Read & Write) | 1, 2 (irreversible remote changes) | Planned |
 
 ## Phases

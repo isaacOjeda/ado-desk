@@ -109,3 +109,118 @@ button.wi-link:hover {
   text-align: center;
   color: var(--text-muted);
 }
+
+/* Actions (state, assignee, comment). Writes run in Rust; the detail reloads afterwards. */
+.wi-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 10px;
+}
+
+.wi-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.wi-action select {
+  height: 26px;
+  max-width: 220px;
+  padding: 0 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.wi-action select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.wi-action select:disabled {
+  opacity: 0.55;
+}
+
+.wi-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.wi-action-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--tone-red);
+}
+
+.wi-readonly {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.wi-comment-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.wi-comment-box textarea {
+  resize: vertical;
+  min-height: 64px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  user-select: text;
+}
+
+.wi-comment-box textarea:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.wi-comment-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wi-comment-buttons {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.wi-comment-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.comment .wi-comment-box {
+  margin: 4px 0 0;
+}
+
+.wi-comment-count {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.wi-comment-count.is-over {
+  color: var(--tone-red);
+}

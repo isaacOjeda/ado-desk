@@ -48,4 +48,4 @@ The README's architecture section predates multi-organization support; trust the
 ## Workflow notes
 
 - Feature specs and task logs live in `odd/tasks/<feature>.md` (Specs `S#`, Tasks, Log). Read the relevant one before changing a feature it covers.
-- Required PAT scopes: Work Items (Read), Code (Read), Project and Team (Read); Build (Read) is optional (pull request build status, `checks.rs` degrades to unavailable without it). Adding a call that needs another scope also means updating the `Forbidden` message in `error.rs` and the README.
+- Required PAT scopes: Work Items (Read), Code (Read), Project and Team (Read); Build (Read) is optional (pull request build status, `checks.rs` degrades to unavailable without it); Work Items (Read & Write) is optional (work item actions in `work_item_actions.rs`). Writes go through `AzdoClient::write`, whose failures never map to `Unauthorized` (a token without a write scope must not sign out) and never echo server text. Adding a call that needs another scope also means updating the `Forbidden` message in `error.rs` and the README.

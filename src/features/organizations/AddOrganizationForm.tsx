@@ -52,7 +52,7 @@ export function AddOrganizationForm({ submitLabel, onAdded, onCancel, autoFocus 
         <span>Personal access token</span>
         <input
           type="password"
-          placeholder="Scopes: Work Items, Code, Project (Read); Build (Read) optional"
+          placeholder="Scopes: Work Items, Code, Project (Read); Build (Read), Work Items (Write) optional"
           value={pat}
           onChange={(e) => setPat(e.target.value)}
           autoComplete="off"

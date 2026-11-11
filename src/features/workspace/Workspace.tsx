@@ -161,6 +161,11 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
         return;
       }
       if (e.key === "Escape" && selection) {
+        // Leaving a comment box must not close the detail and drop what was typed.
+        if (e.target instanceof HTMLTextAreaElement) {
+          e.target.blur();
+          return;
+        }
         setSelection(null);
         return;
       }
@@ -217,7 +222,12 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
 
       <main className="content">
         {selection?.kind === "workItem" ? (
-          <WorkItemDetailView key={selection.workItem.id} workItem={selection.workItem} onBack={() => setSelection(null)} />
+          <WorkItemDetailView
+            key={selection.workItem.id}
+            workItem={selection.workItem}
+            onBack={() => setSelection(null)}
+            me={session.email ? { email: session.email, displayName: session.displayName } : null}
+          />
         ) : selection?.kind === "pullRequest" ? (
           <PullRequestDetailView
             key={selection.pullRequest.id}

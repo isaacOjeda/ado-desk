@@ -66,6 +66,7 @@ with these scopes:
 - **Code**: Read
 - **Project and Team**: Read (used to discover projects for the pull request list)
 - **Build**: Read (optional: build status on pull requests; without it, builds show as unavailable and everything else still loads)
+- **Work Items**: Read & Write (optional: work item actions; without it, the work item detail stays read-only with a hint)
 
 Enter your organization (`contoso` or `https://dev.azure.com/contoso`) and the token.
 The token is validated against Azure DevOps, then stored in the OS credential store
@@ -102,6 +103,18 @@ Settings > Shortcuts turns the shortcut off or records a new one (Command, Contr
 key; Shift alone is not enough). A combination another app already uses is rejected and the
 previous one stays active. If the saved shortcut is taken when ADO Desk starts, the bar is still
 available from the menu bar icon.
+
+## Work item actions
+
+With **Work Items: Read & Write**, the work item detail lets you change the state (after a
+confirmation), change the assignee (a member of the project's default team, or you) and add a
+plain-text comment. Your own comments can be deleted (after a confirmation) and, when they hold
+plain text only, edited; comments with formatting, mentions or Markdown are edited in Azure
+DevOps, so the app never drops their formatting. Every write runs in Rust with validated values
+only; state and assignee changes are refused if the item changed since it loaded, a comment edit
+or delete is refused unless the comment is still yours and unchanged, and the item and its
+comments are read again from Azure DevOps after each write. Without the scope the actions are hidden behind a hint;
+a refused write never signs you out.
 
 ## Notifications
 

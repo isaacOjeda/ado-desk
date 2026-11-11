@@ -12,6 +12,7 @@ use crate::azdo::model::{self, ListResponse, RawWorkItem};
 use crate::commands::current_client;
 use crate::error::AppResult;
 use crate::rich_text;
+use crate::work_item_actions;
 
 // ---------------------------------------------------------------------------
 // Domain types (sent to the frontend)
@@ -21,6 +22,8 @@ use crate::rich_text;
 #[serde(rename_all = "camelCase")]
 pub struct WorkItemDetail {
     pub id: i64,
+    /// Revision loaded; writes test it so a change made elsewhere is not overwritten.
+    pub rev: i64,
     pub title: String,
     pub work_item_type: String,
     pub state: String,
@@ -91,7 +94,14 @@ pub struct DevelopmentLink {
 #[serde(rename_all = "camelCase")]
 pub struct WorkItemComment {
     pub id: i64,
+    /// Azure DevOps comment version; an edit or delete must still see it.
+    pub version: i64,
     pub author: String,
+    /// Written by the signed-in user (author id equals the session user id).
+    pub is_mine: bool,
+    /// Plain text to edit, only for the user's comments the app can edit without dropping
+    /// formatting (see `work_item_actions::editable_comment_text`). Never rendered as HTML.
+    pub editable_text: Option<String>,
     pub created_at: Option<String>,
     pub modified_at: Option<String>,
     pub is_edited: bool,
@@ -107,6 +117,8 @@ pub struct WorkItemComment {
 #[serde(rename_all = "camelCase")]
 pub struct RawWorkItemDetail {
     pub id: i64,
+    #[serde(default)]
+    pub rev: i64,
     #[serde(default)]
     pub fields: Map<String, Value>,
     #[serde(default)]
@@ -435,6 +447,7 @@ pub fn map_detail(organization: &str, raw: RawWorkItemDetail, linked: &[RawWorkI
 
     WorkItemDetail {
         id: raw.id,
+        rev: raw.rev,
         title: text("System.Title").unwrap_or_default(),
         work_item_type: text("System.WorkItemType").unwrap_or_default(),
         state: text("System.State").unwrap_or_default(),
@@ -476,7 +489,21 @@ pub fn map_detail(organization: &str, raw: RawWorkItemDetail, linked: &[RawWorkI
     }
 }
 
-fn map_comment(organization: &str, raw: RawComment) -> WorkItemComment {
+/// Whether `created_by` (an identity object) is the user `user_id`.
+fn is_author(created_by: Option<&Value>, user_id: &str) -> bool {
+    let id = created_by.and_then(|v| v.get("id")).and_then(Value::as_str).unwrap_or_default();
+    !user_id.trim().is_empty() && id.trim().eq_ignore_ascii_case(user_id.trim())
+}
+
+pub(crate) fn map_comment(organization: &str, user_id: &str, raw: RawComment) -> WorkItemComment {
+    let is_mine = is_author(raw.created_by.as_ref(), user_id);
+    let editable_text = if is_mine {
+        raw.text
+            .as_deref()
+            .and_then(|text| work_item_actions::editable_comment_text(text, raw.format.as_deref()))
+    } else {
+        None
+    };
     let rendered = raw.rendered_text.filter(|t| !t.trim().is_empty());
     let text = raw.text.unwrap_or_default();
     let is_markdown = raw
@@ -495,6 +522,9 @@ fn map_comment(organization: &str, raw: RawComment) -> WorkItemComment {
 
     WorkItemComment {
         id: raw.id.or(raw.comment_id).unwrap_or_default(),
+        version: raw.version.unwrap_or_default(),
+        is_mine,
+        editable_text,
         author: raw
             .created_by
             .as_ref()
@@ -507,12 +537,13 @@ fn map_comment(organization: &str, raw: RawComment) -> WorkItemComment {
     }
 }
 
-/// Drops deleted comments, sanitizes their HTML and sorts newest first.
-pub fn map_comments(organization: &str, raw: Vec<RawComment>) -> Vec<WorkItemComment> {
+/// Drops deleted comments, sanitizes their HTML and sorts newest first. `user_id` is the
+/// signed-in identity, which marks the user's own comments.
+pub fn map_comments(organization: &str, user_id: &str, raw: Vec<RawComment>) -> Vec<WorkItemComment> {
     let mut comments: Vec<WorkItemComment> = raw
         .into_iter()
         .filter(|c| !c.is_deleted)
-        .map(|c| map_comment(organization, c))
+        .map(|c| map_comment(organization, user_id, c))
         .collect();
     comments.sort_by(|a, b| b.created_at.cmp(&a.created_at));
     comments
@@ -590,7 +621,7 @@ pub async fn list_work_item_comments(
         }
     }
 
-    Ok(map_comments(client.org(), comments))
+    Ok(map_comments(client.org(), &client.session().user_id, comments))
 }
 
 #[cfg(test)]
@@ -642,6 +673,7 @@ mod tests {
     fn maps_scalar_fields_identities_and_tags() {
         let raw = raw_detail(json!({
             "id": 42,
+            "rev": 9,
             "fields": {
                 "System.Title": "Login fails",
                 "System.WorkItemType": "Bug",
@@ -665,6 +697,7 @@ mod tests {
         }));
 
         let item = map_detail(ORG, raw, &[]);
+        assert_eq!(item.rev, 9);
 
         assert_eq!(item.id, 42);
         assert_eq!(item.title, "Login fails");
@@ -864,7 +897,7 @@ mod tests {
         .unwrap();
         assert_eq!(raw.continuation_token.as_deref(), Some("next"));
 
-        let comments = map_comments(ORG, raw.comments);
+        let comments = map_comments(ORG, ME, raw.comments);
 
         assert_eq!(comments.iter().map(|c| c.id).collect::<Vec<_>>(), vec![2, 4, 1, 5]);
         assert_eq!(comments[0].author, "Grace");
@@ -879,5 +912,54 @@ mod tests {
         assert_eq!(comments[3].author, "Unknown user");
         assert!(comments[3].html.contains("<b>html</b>"));
         assert!(!comments[3].html.contains("onerror"));
+    }
+
+    const ME: &str = "D291B0C4-0000-0000-0000-000000000001";
+
+    fn comment(value: serde_json::Value) -> RawComment {
+        serde_json::from_value(value).unwrap()
+    }
+
+    #[test]
+    fn marks_own_comments_and_their_editable_text() {
+        let mine = map_comment(ORG, ME, comment(json!({
+            "id": 7, "version": 2, "text": "Fixed &lt;b&gt;<br>done",
+            "createdBy": { "displayName": "Ada", "id": "d291b0c4-0000-0000-0000-000000000001" }
+        })));
+        assert!(mine.is_mine);
+        assert_eq!(mine.version, 2);
+        assert_eq!(mine.editable_text.as_deref(), Some("Fixed <b>\ndone"));
+
+        let formatted = map_comment(ORG, ME, comment(json!({
+            "id": 8, "text": "<div><b>bold</b></div>", "createdBy": { "id": ME }
+        })));
+        assert!(formatted.is_mine);
+        assert_eq!(formatted.editable_text, None);
+        assert_eq!(formatted.version, 0);
+
+        let markdown = map_comment(ORG, ME, comment(json!({
+            "id": 9, "format": "markdown", "text": "plain", "createdBy": { "id": ME }
+        })));
+        assert!(markdown.is_mine);
+        assert_eq!(markdown.editable_text, None);
+    }
+
+    #[test]
+    fn other_users_or_unknown_authors_are_not_mine() {
+        for created_by in [
+            json!({ "displayName": "Grace", "id": "aaaa" }),
+            json!({ "displayName": "Ada" }),
+            json!({ "id": "" }),
+            json!("Ada <ada@x.com>"),
+        ] {
+            let c = map_comment(ORG, ME, comment(json!({ "id": 1, "text": "hi", "createdBy": created_by })));
+            assert!(!c.is_mine, "{created_by}");
+            assert_eq!(c.editable_text, None);
+        }
+        let no_author = map_comment(ORG, ME, comment(json!({ "id": 1, "text": "hi" })));
+        assert!(!no_author.is_mine);
+        // An empty session id never matches an empty author id.
+        let empty = map_comment(ORG, "", comment(json!({ "id": 1, "text": "hi", "createdBy": { "id": "" } })));
+        assert!(!empty.is_mine);
     }
 }

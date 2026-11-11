@@ -1,6 +1,6 @@
 // Presentational pieces of the work item form. They only render props; fetching lives in
 // `WorkItemDetailView`.
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Avatar, Badge, CommentCard, Dot, EmptyState, ErrorBanner, RichText, Spinner } from "../../components/ui";
 import { stateTone, timeAgo, workItemTypeTone } from "../../lib/format";
@@ -70,17 +70,24 @@ export function Discussion({
   error,
   fallbackCount,
   onRetry,
+  composer,
+  renderComment,
 }: {
   comments: WorkItemComment[] | null;
   loading: boolean;
   error: string | null;
   fallbackCount: number | null;
   onRetry: () => void;
+  /** New comment box, shown above the comments when the token can write. */
+  composer?: ReactNode;
+  /** Replaces a comment's card (the user's own comments, with actions); `null` keeps it. */
+  renderComment?: (comment: WorkItemComment, edited: ReactNode) => ReactNode | null;
 }) {
   const count = comments?.length ?? fallbackCount;
   return (
     <section className="section">
       <h2 className="section-title">Discussion{count !== null ? ` (${count})` : ""}</h2>
+      {composer}
       {error ? (
         <ErrorBanner message={error} onRetry={onRetry} />
       ) : loading && !comments ? (
@@ -88,21 +95,20 @@ export function Discussion({
           <Spinner />
         </div>
       ) : comments && comments.length > 0 ? (
-        comments.map((comment) => (
-          <CommentCard
-            key={comment.id}
-            author={comment.author}
-            date={comment.createdAt}
-            html={comment.html}
-            footer={
-              comment.isEdited ? (
-                <p className="wi-edited" title={formatDate(comment.modifiedAt)}>
-                  (edited)
-                </p>
-              ) : undefined
-            }
-          />
-        ))
+        comments.map((comment) => {
+          const edited = comment.isEdited ? (
+            <p className="wi-edited" title={formatDate(comment.modifiedAt)}>
+              (edited)
+            </p>
+          ) : undefined;
+          return (
+            <Fragment key={comment.id}>
+              {renderComment?.(comment, edited) ?? (
+                <CommentCard author={comment.author} date={comment.createdAt} html={comment.html} footer={edited} />
+              )}
+            </Fragment>
+          );
+        })
       ) : (
         <p className="rich-empty">No comments yet.</p>
       )}
