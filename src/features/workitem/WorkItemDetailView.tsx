@@ -81,7 +81,7 @@ export function WorkItemDetailView({ workItem, onBack, me }: WorkItemDetailViewP
                 fallbackCount={item.commentCount}
                 onRetry={comments.reload}
                 composer={
-                  canWrite === true ? <CommentBox item={item} onDenied={deny} onChanged={reloadAll} /> : undefined
+                  canWrite === true ? <CommentBox item={item} onChanged={reloadAll} /> : undefined
                 }
                 renderComment={
                   canWrite === true
@@ -91,7 +91,6 @@ export function WorkItemDetailView({ workItem, onBack, me }: WorkItemDetailViewP
                             item={item}
                             comment={comment}
                             edited={edited}
-                            onDenied={deny}
                             onChanged={reloadAll}
                           />
                         ) : null

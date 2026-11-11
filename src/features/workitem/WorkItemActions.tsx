@@ -46,8 +46,13 @@ export function useWriteAccess(item: WorkItemDetail | null): { canWrite: boolean
   return { canWrite, deny: () => setCanWrite(false) };
 }
 
-/** Runs one write: reports a refusal for lack of access, reloads the item after success. */
-function useWrite(onDenied: () => void, onChanged: () => void) {
+/**
+ * Runs one write and reads the item again afterwards, whether it succeeded or not (a refused
+ * change usually means the detail is out of date). A refusal for lack of access calls
+ * `onDenied` when given (the detail switches to its read-only hint); without it the refusal
+ * shows inline, so a typed comment is not thrown away.
+ */
+function useWrite(onChanged: () => void, onDenied?: () => void) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,14 +61,14 @@ function useWrite(onDenied: () => void, onChanged: () => void) {
     setError(null);
     try {
       await write();
-      onChanged();
       return true;
     } catch (err) {
-      if (err instanceof ApiError && err.kind === "writeDenied") onDenied();
+      if (onDenied && err instanceof ApiError && err.kind === "writeDenied") onDenied();
       else setError(errorText(err));
       return false;
     } finally {
       setBusy(false);
+      onChanged();
     }
   };
 
@@ -93,7 +98,7 @@ export function WorkItemActionsBar({
   const [states, setStates] = useState<string[] | null>(null);
   const [members, setMembers] = useState<TeamMember[] | null>(null);
   const [pendingState, setPendingState] = useState<string | null>(null);
-  const { busy, error, run } = useWrite(onDenied, onChanged);
+  const { busy, error, run } = useWrite(onChanged, onDenied);
   const { project, workItemType } = item;
 
   useEffect(() => {
@@ -252,17 +257,10 @@ function CommentEditor({
 }
 
 /** New comment, above the discussion. Plain text: Rust escapes it before sending. */
-export function CommentBox({
-  item,
-  onDenied,
-  onChanged,
-}: {
-  item: WorkItemDetail;
-  onDenied: () => void;
-  onChanged: () => void;
-}) {
+export function CommentBox({ item, onChanged }: { item: WorkItemDetail; onChanged: () => void }) {
   const [text, setText] = useState("");
-  const { busy, error, run } = useWrite(onDenied, onChanged);
+  // A denial shows inline: switching to the hint would drop the typed comment.
+  const { busy, error, run } = useWrite(onChanged);
 
   const submit = async () => {
     if (await run(() => workItemActionsApi.addComment(item, text))) setText("");
@@ -292,18 +290,17 @@ export function OwnComment({
   item,
   comment,
   edited,
-  onDenied,
   onChanged,
 }: {
   item: WorkItemDetail;
   comment: WorkItemComment;
   edited: ReactNode;
-  onDenied: () => void;
   onChanged: () => void;
 }) {
   const [mode, setMode] = useState<"view" | "edit" | "confirmDelete">("view");
   const [text, setText] = useState("");
-  const { busy, error, run, clearError } = useWrite(onDenied, onChanged);
+  // A denial shows inline, keeping an edit in progress (see CommentBox).
+  const { busy, error, run, clearError } = useWrite(onChanged);
   const editable = comment.editableText;
   const leave = () => {
     clearError();
@@ -312,7 +309,6 @@ export function OwnComment({
 
   const attempt = async (write: () => Promise<void>) => {
     if (await run(write)) setMode("view");
-    else onChanged();
   };
 
   const editor =
