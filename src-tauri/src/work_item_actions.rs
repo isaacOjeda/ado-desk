@@ -10,11 +10,12 @@ use tauri::State;
 
 use crate::AppState;
 use crate::azdo::model::ListResponse;
-use crate::azdo::{AzdoClient, WriteAccess};
+use crate::azdo::{AzdoClient, WriteAccess, WriteBody};
 use crate::commands::current_client;
 use crate::error::{AppError, AppResult};
 use crate::queries::{self, TeamMember};
 use crate::themes::is_format_char;
+use crate::work_items::{self, RawComment, WorkItemComment};
 
 /// Longest comment accepted, in characters of plain text (before HTML escaping).
 pub const MAX_COMMENT_CHARS: usize = 4000;
@@ -46,6 +47,81 @@ pub fn comment_html(input: &str) -> AppResult<String> {
     }
     let lines: Vec<String> = text.split('\n').map(escape_html).collect();
     Ok(lines.join("<br>"))
+}
+
+/// Plain text of a stored comment, when the app can edit it without dropping anything: HTML
+/// format (not markdown), no tags but `<br>`, only the entities [`comment_html`] writes, and
+/// text a new comment would accept. Formatting, mentions or markdown give `None`.
+pub fn editable_comment_text(text: &str, format: Option<&str>) -> Option<String> {
+    if format.is_some_and(|f| !f.eq_ignore_ascii_case("html")) {
+        return None;
+    }
+    let mut plain = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(c) = rest.chars().next() {
+        let taken = match c {
+            '<' => {
+                let tag = LINE_BREAKS.iter().find(|tag| {
+                    rest.get(..tag.len())
+                        .is_some_and(|head| head.eq_ignore_ascii_case(tag))
+                })?;
+                plain.push('\n');
+                tag.len()
+            }
+            '&' => {
+                let (entity, decoded) = ENTITIES
+                    .iter()
+                    .find(|(entity, _)| rest.starts_with(entity))?;
+                plain.push(*decoded);
+                entity.len()
+            }
+            // A raw line break renders as a space in HTML; editing would turn it into `<br>`.
+            c if c.is_control() || is_format_char(c) => return None,
+            c => {
+                plain.push(c);
+                c.len_utf8()
+            }
+        };
+        rest = &rest[taken..];
+    }
+    comment_html(&plain).is_ok().then_some(plain)
+}
+
+const LINE_BREAKS: [&str; 3] = ["<br>", "<br/>", "<br />"];
+
+const ENTITIES: [(&str, char); 7] = [
+    ("&amp;", '&'),
+    ("&lt;", '<'),
+    ("&gt;", '>'),
+    ("&quot;", '"'),
+    ("&#39;", '\''),
+    ("&#x27;", '\''),
+    ("&apos;", '\''),
+];
+
+/// Refuses an edit or delete of `comment` (`None` when Azure DevOps reports it deleted)
+/// unless it is the user's and still at `seen_version`; an edit also needs editable text.
+pub fn check_comment_change(
+    comment: Option<&WorkItemComment>,
+    seen_version: i64,
+    edit: bool,
+) -> AppResult<()> {
+    let stale = || AppError::InvalidChange("Reload the work item and try again");
+    let comment = comment.ok_or_else(stale)?;
+    if !comment.is_mine {
+        return Err(AppError::InvalidChange(
+            "You can only change your own comments",
+        ));
+    }
+    if comment.version != seen_version {
+        return Err(stale());
+    }
+    if edit && comment.editable_text.is_none() {
+        return Err(AppError::InvalidChange(
+            "This comment has formatting; edit it in Azure DevOps",
+        ));
+    }
+    Ok(())
 }
 
 fn escape_html(text: &str) -> String {
@@ -106,7 +182,7 @@ pub fn validate_assignee(
 /// The error of a read made before a write (states, team members), without server text: the
 /// failure of a write command must not quote Azure DevOps. Other errors pass through.
 pub fn pre_read_error(err: AppError) -> AppError {
-    const MESSAGE: &str = "could not read the work item's options";
+    const MESSAGE: &str = "could not check the work item before the change";
     match err {
         AppError::Api { status, .. } => AppError::Api {
             status,
@@ -183,6 +259,14 @@ fn valid_id(id: i64) -> AppResult<String> {
     }
 }
 
+fn valid_comment_id(comment_id: i64) -> AppResult<String> {
+    if comment_id > 0 {
+        Ok(comment_id.to_string())
+    } else {
+        Err(AppError::InvalidChange("Unknown comment"))
+    }
+}
+
 fn valid_project(project: &str) -> AppResult<String> {
     queries::validate_project(project).map_err(|_| AppError::InvalidChange("Unknown project"))
 }
@@ -225,10 +309,9 @@ async fn send_write(
     client: &AzdoClient,
     method: Method,
     url: url::Url,
-    body: &Value,
-    content_type: &'static str,
+    body: Option<WriteBody<'_>>,
 ) -> AppResult<()> {
-    let result = client.write(method, url, body, content_type).await;
+    let result = client.write(method, url, body).await;
     client.record_work_write_access(remembered_access(client.work_write_access(), &result));
     result
 }
@@ -252,7 +335,9 @@ pub async fn work_item_write_access(
     };
     let mut url = client.url(&["_apis", "wit", "workitems", &id]);
     url.query_pairs_mut().append_pair("validateOnly", "true");
-    let outcome = client.write(Method::PATCH, url, &patch, JSON_PATCH).await;
+    let outcome = client
+        .write(Method::PATCH, url, Some((&patch, JSON_PATCH)))
+        .await;
     if let Err(err) = &outcome {
         eprintln!("work item write probe: {}", err.kind());
     }
@@ -291,7 +376,7 @@ pub async fn set_work_item_state(
     let value = validate_state(&value, &states)?;
     let patch = field_patch(rev, "/fields/System.State", &value)?;
     let url = client.url(&[&project, "_apis", "wit", "workitems", &id]);
-    send_write(&client, Method::PATCH, url, &patch, JSON_PATCH).await
+    send_write(&client, Method::PATCH, url, Some((&patch, JSON_PATCH))).await
 }
 
 #[tauri::command]
@@ -319,7 +404,7 @@ pub async fn set_work_item_assignee(
     )?;
     let patch = field_patch(rev, "/fields/System.AssignedTo", &value)?;
     let url = client.url(&[&project, "_apis", "wit", "workitems", &id]);
-    send_write(&client, Method::PATCH, url, &patch, JSON_PATCH).await
+    send_write(&client, Method::PATCH, url, Some((&patch, JSON_PATCH))).await
 }
 
 #[tauri::command]
@@ -337,7 +422,90 @@ pub async fn add_work_item_comment(
         &[&project, "_apis", "wit", "workItems", &id, "comments"],
         COMMENTS_API_VERSION,
     );
-    send_write(&client, Method::POST, url, &json!({ "text": html }), JSON).await
+    send_write(
+        &client,
+        Method::POST,
+        url,
+        Some((&json!({ "text": html }), JSON)),
+    )
+    .await
+}
+
+fn comment_url(client: &AzdoClient, project: &str, id: &str, comment_id: &str) -> url::Url {
+    client.url_with_version(
+        &[
+            project,
+            "_apis",
+            "wit",
+            "workItems",
+            id,
+            "comments",
+            comment_id,
+        ],
+        COMMENTS_API_VERSION,
+    )
+}
+
+/// The comment as Azure DevOps has it now (`None` once deleted), mapped exactly as the
+/// discussion maps it, so ownership and editability agree with what the user saw.
+async fn current_comment(
+    client: &AzdoClient,
+    project: &str,
+    id: &str,
+    comment_id: &str,
+) -> AppResult<Option<WorkItemComment>> {
+    let mut url = comment_url(client, project, id, comment_id);
+    url.query_pairs_mut().append_pair("includeDeleted", "true");
+    let raw: RawComment = client.get_json(url).await.map_err(pre_read_error)?;
+    Ok((!raw.is_deleted)
+        .then(|| work_items::map_comment(client.org(), &client.session().user_id, raw)))
+}
+
+/// Replaces the text of one of the user's plain comments. The update API has no revision
+/// test, so the comment is read first and must still be at `version`.
+#[tauri::command]
+pub async fn update_work_item_comment(
+    state: State<'_, AppState>,
+    project: String,
+    id: i64,
+    comment_id: i64,
+    version: i64,
+    text: String,
+) -> AppResult<()> {
+    let client = current_client(&state)?;
+    let project = valid_project(&project)?;
+    let id = valid_id(id)?;
+    let comment_id = valid_comment_id(comment_id)?;
+    let html = comment_html(&text)?;
+    let current = current_comment(&client, &project, &id, &comment_id).await?;
+    check_comment_change(current.as_ref(), version, true)?;
+    let url = comment_url(&client, &project, &id, &comment_id);
+    send_write(
+        &client,
+        Method::PATCH,
+        url,
+        Some((&json!({ "text": html }), JSON)),
+    )
+    .await
+}
+
+/// Deletes one of the user's comments (Azure DevOps keeps it in the History tab).
+#[tauri::command]
+pub async fn delete_work_item_comment(
+    state: State<'_, AppState>,
+    project: String,
+    id: i64,
+    comment_id: i64,
+    version: i64,
+) -> AppResult<()> {
+    let client = current_client(&state)?;
+    let project = valid_project(&project)?;
+    let id = valid_id(id)?;
+    let comment_id = valid_comment_id(comment_id)?;
+    let current = current_comment(&client, &project, &id, &comment_id).await?;
+    check_comment_change(current.as_ref(), version, false)?;
+    let url = comment_url(&client, &project, &id, &comment_id);
+    send_write(&client, Method::DELETE, url, None).await
 }
 
 #[cfg(test)]
@@ -356,6 +524,101 @@ mod tests {
             Err(AppError::InvalidChange(message)) => message.to_string(),
             other => panic!("expected InvalidChange, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn editable_comment_text_reverses_comment_html() {
+        for input in [
+            "Fixed <b>it</b> & \"done\"\nsee 'notes'",
+            "one line",
+            "a\n\nb",
+            "&amp; literally",
+            "é ñ 日本",
+        ] {
+            let stored = comment_html(input).unwrap();
+            assert_eq!(
+                editable_comment_text(&stored, None).as_deref(),
+                Some(input),
+                "{stored}"
+            );
+            assert_eq!(
+                editable_comment_text(&stored, Some("html")).as_deref(),
+                Some(input)
+            );
+        }
+        assert_eq!(
+            editable_comment_text("a<br/>b<BR />c&#x27;&apos;", None).as_deref(),
+            Some("a\nb\nc''")
+        );
+    }
+
+    #[test]
+    fn editable_comment_text_refuses_anything_it_would_drop() {
+        for stored in [
+            "<div>a</div>",
+            "a <b>b</b>",
+            "<a href=\"#\" data-vss-mention=\"version:2.0,x\">@Ada</a> hi",
+            "a&nbsp;b",
+            "a & b",
+            "a\nb",
+            "",
+            "<br>",
+        ] {
+            assert_eq!(editable_comment_text(stored, None), None, "{stored}");
+        }
+        assert_eq!(editable_comment_text("plain", Some("markdown")), None);
+        assert_eq!(editable_comment_text("plain", Some("other")), None);
+        assert_eq!(
+            editable_comment_text(&"x".repeat(MAX_COMMENT_CHARS + 1), None),
+            None
+        );
+    }
+
+    fn own_comment(version: i64, editable: bool, mine: bool) -> WorkItemComment {
+        WorkItemComment {
+            id: 1,
+            version,
+            author: "Ada".into(),
+            is_mine: mine,
+            editable_text: editable.then(|| "text".to_string()),
+            created_at: None,
+            modified_at: None,
+            is_edited: false,
+            html: String::new(),
+        }
+    }
+
+    #[test]
+    fn valid_comment_id_rejects_non_positive_ids() {
+        assert_eq!(valid_comment_id(12).unwrap(), "12");
+        assert_eq!(rejected(valid_comment_id(0)), "Unknown comment");
+        assert_eq!(rejected(valid_comment_id(-3)), "Unknown comment");
+    }
+
+    #[test]
+    fn check_comment_change_needs_the_users_current_comment() {
+        let ok = own_comment(2, true, true);
+        assert!(check_comment_change(Some(&ok), 2, true).is_ok());
+        assert!(check_comment_change(Some(&ok), 2, false).is_ok());
+
+        let stale = "Reload the work item and try again";
+        assert_eq!(rejected(check_comment_change(None, 2, false)), stale);
+        assert_eq!(rejected(check_comment_change(Some(&ok), 1, true)), stale);
+        assert_eq!(rejected(check_comment_change(Some(&ok), 3, false)), stale);
+        assert_eq!(
+            rejected(check_comment_change(
+                Some(&own_comment(2, true, false)),
+                2,
+                false
+            )),
+            "You can only change your own comments"
+        );
+        let formatted = own_comment(2, false, true);
+        assert!(check_comment_change(Some(&formatted), 2, false).is_ok());
+        assert_eq!(
+            rejected(check_comment_change(Some(&formatted), 2, true)),
+            "This comment has formatting; edit it in Azure DevOps"
+        );
     }
 
     #[test]
@@ -479,12 +742,12 @@ mod tests {
         });
         assert_eq!(
             api.to_string(),
-            "Azure DevOps returned HTTP 500: could not read the work item's options"
+            "Azure DevOps returned HTTP 500: could not check the work item before the change"
         );
         let decode = pre_read_error(AppError::Decode("invalid type: string \"x\"".into()));
         assert_eq!(
             decode.to_string(),
-            "Unexpected response from Azure DevOps: could not read the work item's options"
+            "Unexpected response from Azure DevOps: could not check the work item before the change"
         );
         assert!(matches!(
             pre_read_error(AppError::NotFound),

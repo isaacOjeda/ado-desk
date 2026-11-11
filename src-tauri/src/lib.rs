@@ -102,6 +102,8 @@ pub fn run() {
             work_item_actions::set_work_item_state,
             work_item_actions::set_work_item_assignee,
             work_item_actions::add_work_item_comment,
+            work_item_actions::update_work_item_comment,
+            work_item_actions::delete_work_item_comment,
             pull_requests::get_pull_request,
             pull_requests::list_pull_request_threads,
             pull_requests::list_pull_request_files,

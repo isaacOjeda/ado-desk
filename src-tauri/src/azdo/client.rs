@@ -116,25 +116,12 @@ impl AzdoClient {
         *self.work_write.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = access;
     }
 
-    /// Authenticated write (POST, PATCH) with a JSON body. The response body is not decoded:
-    /// once Azure DevOps accepted a change, a surprising body must not report it as failed.
-    /// Failures map through [`write_status_error`], never to `Unauthorized`.
-    pub(crate) async fn write(
-        &self,
-        method: Method,
-        url: Url,
-        body: &Value,
-        content_type: &'static str,
-    ) -> AppResult<()> {
-        let body = serde_json::to_vec(body).map_err(|err| AppError::Decode(err.to_string()))?;
-        let response = self
-            .http
-            .request(method, url)
-            .basic_auth("", Some(&self.pat))
-            .header(CONTENT_TYPE, content_type)
-            .body(body)
-            .send()
-            .await?;
+    /// Authenticated write (POST, PATCH, DELETE), with a body of the given content type or
+    /// none. The response body is not decoded: once Azure DevOps accepted a change, a
+    /// surprising body must not report it as failed. Failures map through
+    /// [`write_status_error`], never to `Unauthorized`.
+    pub(crate) async fn write(&self, method: Method, url: Url, body: Option<WriteBody<'_>>) -> AppResult<()> {
+        let response = write_request(&self.http, &self.pat, method, url, body)?.send().await?;
         match write_status_error(response.status()) {
             Some(err) => Err(err),
             None => Ok(()),
@@ -387,6 +374,28 @@ async fn send<T: DeserializeOwned>(request: RequestBuilder) -> AppResult<(T, Hea
         .map_err(|err| AppError::Decode(err.to_string()))
 }
 
+/// A write body: the JSON value and the content type it is sent as.
+pub(crate) type WriteBody<'a> = (&'a Value, &'static str);
+
+/// The request of [`AzdoClient::write`]. Without a body nothing is sent, not even a
+/// Content-Type (a DELETE carries no `null`).
+pub(crate) fn write_request(
+    http: &reqwest::Client,
+    pat: &str,
+    method: Method,
+    url: Url,
+    body: Option<WriteBody<'_>>,
+) -> AppResult<RequestBuilder> {
+    let request = http.request(method, url).basic_auth("", Some(pat));
+    Ok(match body {
+        Some((value, content_type)) => {
+            let bytes = serde_json::to_vec(value).map_err(|err| AppError::Decode(err.to_string()))?;
+            request.header(CONTENT_TYPE, content_type).body(bytes)
+        }
+        None => request,
+    })
+}
+
 /// The error of a write answered with `status`, or `None` when the write was accepted.
 /// A token without a write scope may be answered 401 (or 203, or a redirect to sign-in) as
 /// well as 403; all of them mean "no write access" here, so a write never signs the user out.
@@ -424,8 +433,35 @@ fn api_message(body: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{StatusCode, api_message, write_status_error};
+    use super::{Method, StatusCode, api_message, write_request, write_status_error};
     use crate::error::AppError;
+    use reqwest::header::CONTENT_TYPE;
+    use serde_json::json;
+
+    fn built(body: Option<(&serde_json::Value, &'static str)>) -> reqwest::Request {
+        let url = url::Url::parse("https://dev.azure.com/contoso/p/_apis/x").unwrap();
+        write_request(&reqwest::Client::new(), "pat", Method::DELETE, url, body)
+            .unwrap()
+            .build()
+            .unwrap()
+    }
+
+    #[test]
+    fn write_request_without_body_sends_no_body_or_content_type() {
+        let request = built(None);
+        assert_eq!(request.method(), Method::DELETE);
+        assert!(request.body().is_none());
+        assert!(request.headers().get(CONTENT_TYPE).is_none());
+        assert!(request.headers().get("authorization").is_some());
+    }
+
+    #[test]
+    fn write_request_with_body_sends_json_and_its_content_type() {
+        let value = json!({ "text": "hi" });
+        let request = built(Some((&value, "application/json")));
+        assert_eq!(request.headers()[CONTENT_TYPE], "application/json");
+        assert_eq!(request.body().and_then(|b| b.as_bytes()), Some(&br#"{"text":"hi"}"#[..]));
+    }
 
     #[test]
     fn write_status_error_never_signs_out() {
