@@ -60,7 +60,13 @@ export interface DevelopmentLink {
 /** Mirrors `work_items::WorkItemComment` (Rust). `html` is already sanitized. */
 export interface WorkItemComment {
   id: number;
+  /** Azure DevOps comment version; edits and deletes send the one the user saw. */
+  version: number;
   author: string;
+  /** Written by the signed-in user. */
+  isMine: boolean;
+  /** Plain text to edit; `null` when not the user's or it has formatting (delete only). */
+  editableText: string | null;
   createdAt: string | null;
   modifiedAt: string | null;
   isEdited: boolean;
@@ -92,6 +98,21 @@ export const workItemActionsApi = {
     call<void>("set_work_item_assignee", { project: item.project, id: item.id, rev: item.rev, assignee }),
   addComment: (item: WorkItemDetail, text: string) =>
     call<void>("add_work_item_comment", { project: item.project, id: item.id, text }),
+  updateComment: (item: WorkItemDetail, comment: WorkItemComment, text: string) =>
+    call<void>("update_work_item_comment", {
+      project: item.project,
+      id: item.id,
+      commentId: comment.id,
+      version: comment.version,
+      text,
+    }),
+  deleteComment: (item: WorkItemDetail, comment: WorkItemComment) =>
+    call<void>("delete_work_item_comment", {
+      project: item.project,
+      id: item.id,
+      commentId: comment.id,
+      version: comment.version,
+    }),
 };
 
 /** Rust accepts comments of 1 to this many characters. */

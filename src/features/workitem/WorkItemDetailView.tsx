@@ -5,7 +5,7 @@ import { workItemTypeTone } from "../../lib/format";
 import { DetailHeader, Dot, ErrorBanner, OpenInBrowser } from "../../components/ui";
 import { workItemApi } from "./api";
 import { Discussion, LoadingBody, NotFoundBody, WorkItemForm, WorkItemMeta } from "./WorkItemSections";
-import { CommentBox, ReadOnlyHint, WorkItemActionsBar, useWriteAccess, type Me } from "./WorkItemActions";
+import { CommentBox, OwnComment, ReadOnlyHint, WorkItemActionsBar, useWriteAccess, type Me } from "./WorkItemActions";
 import "./workitem.css";
 
 export interface WorkItemDetailViewProps {
@@ -82,6 +82,20 @@ export function WorkItemDetailView({ workItem, onBack, me }: WorkItemDetailViewP
                 onRetry={comments.reload}
                 composer={
                   canWrite === true ? <CommentBox item={item} onDenied={deny} onChanged={reloadAll} /> : undefined
+                }
+                renderComment={
+                  canWrite === true
+                    ? (comment, edited) =>
+                        comment.isMine ? (
+                          <OwnComment
+                            item={item}
+                            comment={comment}
+                            edited={edited}
+                            onDenied={deny}
+                            onChanged={reloadAll}
+                          />
+                        ) : null
+                    : undefined
                 }
               />
             }

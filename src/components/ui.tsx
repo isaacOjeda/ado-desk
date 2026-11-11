@@ -31,11 +31,14 @@ export function CommentCard({
   date,
   html,
   footer,
+  body,
 }: {
   author: string;
   date: string | null;
   html: string;
   footer?: ReactNode;
+  /** Replaces the rendered HTML (an inline editor). */
+  body?: ReactNode;
 }) {
   return (
     <article className="comment">
@@ -49,7 +52,7 @@ export function CommentCard({
             </time>
           )}
         </header>
-        <RichText html={html} />
+        {body ?? <RichText html={html} />}
         {footer}
       </div>
     </article>

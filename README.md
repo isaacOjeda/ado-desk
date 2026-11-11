@@ -108,9 +108,12 @@ available from the menu bar icon.
 
 With **Work Items: Read & Write**, the work item detail lets you change the state (after a
 confirmation), change the assignee (a member of the project's default team, or you) and add a
-plain-text comment. Every write runs in Rust with validated values only; state and assignee
-changes are refused if the item changed since it loaded, and the item and its comments are read
-again from Azure DevOps after each write. Without the scope the actions are hidden behind a hint;
+plain-text comment. Your own comments can be deleted (after a confirmation) and, when they hold
+plain text only, edited; comments with formatting, mentions or Markdown are edited in Azure
+DevOps, so the app never drops their formatting. Every write runs in Rust with validated values
+only; state and assignee changes are refused if the item changed since it loaded, a comment edit
+or delete is refused unless the comment is still yours and unchanged, and the item and its
+comments are read again from Azure DevOps after each write. Without the scope the actions are hidden behind a hint;
 a refused write never signs you out.
 
 ## Notifications

@@ -197,8 +197,22 @@ button.wi-link:hover {
   gap: 10px;
 }
 
-.wi-comment-footer .btn {
+.wi-comment-buttons {
+  display: inline-flex;
+  gap: 6px;
   margin-left: auto;
+}
+
+.wi-comment-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.comment .wi-comment-box {
+  margin: 4px 0 0;
 }
 
 .wi-comment-count {

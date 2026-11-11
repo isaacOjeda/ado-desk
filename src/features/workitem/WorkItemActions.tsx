@@ -1,10 +1,12 @@
-// Work item actions (roadmap phase 6): change the state, change the assignee, add a comment.
+// Work item actions (roadmap phase 6): change the state, change the assignee, add a comment,
+// edit or delete the user's own comments.
 // Every write runs in Rust; afterwards the detail reloads from Azure DevOps (no optimistic
 // updates). Failures stay next to the action and never sign the user out.
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { ApiError } from "../../lib/api";
 import { filtersApi, type TeamMember } from "../filters/api";
-import { MAX_COMMENT_CHARS, workItemActionsApi, type WorkItemDetail } from "./api";
+import { CommentCard } from "../../components/ui";
+import { MAX_COMMENT_CHARS, workItemActionsApi, type WorkItemComment, type WorkItemDetail } from "./api";
 
 export interface Me {
   displayName: string;
@@ -183,6 +185,70 @@ export function WorkItemActionsBar({
   );
 }
 
+/** Comment text area with a code-point counter (as Rust counts) and a submit button. */
+function CommentEditor({
+  text,
+  onText,
+  busy,
+  error,
+  label,
+  submitLabel,
+  busyLabel,
+  onSubmit,
+  onCancel,
+}: {
+  text: string;
+  onText: (text: string) => void;
+  busy: boolean;
+  error: string | null;
+  label: string;
+  submitLabel: string;
+  busyLabel: string;
+  onSubmit: () => void;
+  onCancel?: () => void;
+}) {
+  const length = [...text.trim()].length;
+  const tooLong = length > MAX_COMMENT_CHARS;
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (length > 0 && !tooLong) onSubmit();
+  };
+
+  return (
+    <form className="wi-comment-box" onSubmit={submit}>
+      <textarea
+        value={text}
+        onChange={(e) => onText(e.target.value)}
+        placeholder="Add a comment"
+        rows={3}
+        disabled={busy}
+        aria-label={label}
+        autoFocus={onCancel !== undefined}
+      />
+      <div className="wi-comment-footer">
+        <span className={`wi-comment-count ${tooLong ? "is-over" : ""}`}>
+          {length}/{MAX_COMMENT_CHARS}
+        </span>
+        {error && (
+          <span className="wi-action-error" role="alert">
+            {error}
+          </span>
+        )}
+        <span className="wi-comment-buttons">
+          {onCancel && (
+            <button className="btn btn-ghost btn-sm" type="button" onClick={onCancel} disabled={busy}>
+              Cancel
+            </button>
+          )}
+          <button className="btn btn-primary btn-sm" type="submit" disabled={busy || length === 0 || tooLong}>
+            {busy ? busyLabel : submitLabel}
+          </button>
+        </span>
+      </div>
+    </form>
+  );
+}
+
 /** New comment, above the discussion. Plain text: Rust escapes it before sending. */
 export function CommentBox({
   item,
@@ -195,39 +261,115 @@ export function CommentBox({
 }) {
   const [text, setText] = useState("");
   const { busy, error, run } = useWrite(onDenied, onChanged);
-  // Code points, as Rust counts them.
-  const length = [...text.trim()].length;
-  const tooLong = length > MAX_COMMENT_CHARS;
 
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (length === 0 || tooLong) return;
+  const submit = async () => {
     if (await run(() => workItemActionsApi.addComment(item, text))) setText("");
   };
 
   return (
-    <form className="wi-comment-box" onSubmit={submit}>
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="Add a comment"
-        rows={3}
-        disabled={busy}
-        aria-label="New comment"
+    <CommentEditor
+      text={text}
+      onText={setText}
+      busy={busy}
+      error={error}
+      label="New comment"
+      submitLabel="Comment"
+      busyLabel="Posting…"
+      onSubmit={() => void submit()}
+    />
+  );
+}
+
+/**
+ * One of the user's comments, with Edit (plain comments only, so no formatting is lost) and
+ * Delete (asks first). The comments are read again after every attempt: a refused change
+ * usually means the card is out of date.
+ */
+export function OwnComment({
+  item,
+  comment,
+  edited,
+  onDenied,
+  onChanged,
+}: {
+  item: WorkItemDetail;
+  comment: WorkItemComment;
+  edited: ReactNode;
+  onDenied: () => void;
+  onChanged: () => void;
+}) {
+  const [mode, setMode] = useState<"view" | "edit" | "confirmDelete">("view");
+  const [text, setText] = useState("");
+  const { busy, error, run } = useWrite(onDenied, onChanged);
+  const editable = comment.editableText;
+
+  const attempt = async (write: () => Promise<void>) => {
+    if (await run(write)) setMode("view");
+    else onChanged();
+  };
+
+  const editor =
+    mode === "edit" ? (
+      <CommentEditor
+        text={text}
+        onText={setText}
+        busy={busy}
+        error={error}
+        label="Edit comment"
+        submitLabel="Save"
+        busyLabel="Saving…"
+        onSubmit={() => void attempt(() => workItemActionsApi.updateComment(item, comment, text))}
+        onCancel={() => setMode("view")}
       />
-      <div className="wi-comment-footer">
-        <span className={`wi-comment-count ${tooLong ? "is-over" : ""}`}>
-          {length}/{MAX_COMMENT_CHARS}
-        </span>
-        {error && (
-          <span className="wi-action-error" role="alert">
-            {error}
-          </span>
+    ) : undefined;
+
+  const footer =
+    mode === "edit" ? (
+      edited
+    ) : (
+      <>
+        {edited}
+        {mode === "confirmDelete" ? (
+          <div className="wi-confirm wi-comment-actions" role="group" aria-label="Confirm deleting the comment">
+            <span>Delete this comment?</span>
+            <button className="btn btn-ghost btn-sm" onClick={() => setMode("view")} disabled={busy}>
+              Cancel
+            </button>
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={busy}
+              onClick={() => void attempt(() => workItemActionsApi.deleteComment(item, comment))}
+            >
+              {busy ? "Deleting…" : "Delete"}
+            </button>
+          </div>
+        ) : (
+          <div className="wi-comment-actions">
+            {editable !== null && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => {
+                  setText(editable);
+                  setMode("edit");
+                }}
+              >
+                Edit
+              </button>
+            )}
+            <button className="btn btn-ghost btn-sm" onClick={() => setMode("confirmDelete")}>
+              Delete
+            </button>
+          </div>
         )}
-        <button className="btn btn-primary btn-sm" type="submit" disabled={busy || length === 0 || tooLong}>
-          {busy ? "Posting…" : "Comment"}
-        </button>
-      </div>
-    </form>
+        {error && (
+          <p className="wi-action-error" role="alert">
+            {error}
+          </p>
+        )}
+      </>
+    );
+
+  return (
+    <CommentCard author={comment.author} date={comment.createdAt} html={comment.html} body={editor} footer={footer} />
   );
 }
