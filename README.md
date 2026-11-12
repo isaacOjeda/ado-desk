@@ -167,7 +167,8 @@ run without asking:
 `add_work_item_comment` (plain text), 1-4000 characters each. They are never pre-allowed, so
 Claude Code asks for its own permission first, and ADO Desk then shows the exact action, target
 and text in a dialog: nothing is posted until you click *Post* (Cancel or Esc declines; an
-unanswered request expires after 5 minutes). They need the same write scopes as the app's own
+unanswered request expires after 5 minutes). *Post* becomes available a moment after each
+request appears, so a click meant for something else cannot post it. They need the same write scopes as the app's own
 actions (Code: Read & Write, Work Items: Read & Write).
 
 ![Confirmation dialog: the assistant wants to post a reply on pull request 55, thread 7, with the exact text and Cancel or Post](docs/screenshots/assistant-confirm.png)

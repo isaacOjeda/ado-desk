@@ -169,3 +169,10 @@
   gap: 8px;
   margin-top: 14px;
 }
+
+.assistant-confirm-queue {
+  margin-right: auto;
+  align-self: center;
+  font-size: 12px;
+  color: var(--text-faint);
+}
