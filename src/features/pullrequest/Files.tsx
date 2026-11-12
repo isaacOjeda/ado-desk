@@ -12,7 +12,8 @@ import {
   type PullRequestFiles,
   type PullRequestThread,
 } from "./api";
-import { DiffHeader, DiffView, type DiffMode } from "./Diff";
+import { DiffHeader, DiffView, type DiffMode, type LineCommenting } from "./Diff";
+import { PullRequestReadOnlyHint } from "./Actions";
 import { Async } from "./Async";
 import { changeTypeBadge, directory, fileName, threadCountsByPath } from "./format";
 
@@ -90,11 +91,15 @@ function DiffPanel({
   file,
   threads,
   cache,
+  commenting,
+  readOnly,
 }: {
   pr: PullRequestRef;
   file: FileChange;
   threads: PullRequestThread[];
   cache: Map<string, FileDiff>;
+  commenting?: LineCommenting;
+  readOnly: boolean;
 }) {
   const { project, repositoryId, id } = pr;
   const fetcher = useCallback(async () => {
@@ -113,11 +118,16 @@ function DiffPanel({
   return (
     <div className="pr-diff">
       <DiffHeader file={file} diff={diff.data} mode={previewId ? mode : undefined} onModeChange={setMode} />
+      {readOnly && !showPreview && (
+        <div className="diff-message">
+          <PullRequestReadOnlyHint />
+        </div>
+      )}
       {showPreview ? (
         <PreviewView pr={pr} objectId={previewId} />
       ) : (
         <Async resource={diff}>
-          {(data) => <DiffView file={file} diff={data} threads={fileThreads} webUrl={pr.url} />}
+          {(data) => <DiffView file={file} diff={data} threads={fileThreads} webUrl={pr.url} commenting={commenting} />}
         </Async>
       )}
     </div>
@@ -129,11 +139,15 @@ function FilesPane({
   files,
   truncated,
   threads,
+  commenting,
+  readOnly,
 }: {
   pr: PullRequestRef;
   files: FileChange[];
   truncated: boolean;
   threads: PullRequestThread[];
+  commenting?: LineCommenting;
+  readOnly: boolean;
 }) {
   const [selectedPath, setSelectedPath] = useState<string | null>(files[0]?.path ?? null);
   const cache = useRef(new Map<string, FileDiff>()).current;
@@ -162,7 +176,15 @@ function FilesPane({
           ))}
         </ul>
       </nav>
-      <DiffPanel key={selected.path} pr={pr} file={selected} threads={threads} cache={cache} />
+      <DiffPanel
+        key={selected.path}
+        pr={pr}
+        file={selected}
+        threads={threads}
+        cache={cache}
+        commenting={commenting}
+        readOnly={readOnly}
+      />
     </div>
   );
 }
@@ -171,14 +193,28 @@ export function FilesTab({
   pr,
   files,
   threads,
+  commenting,
+  readOnly,
 }: {
   pr: PullRequestRef;
   files: Resource<PullRequestFiles>;
   threads: PullRequestThread[];
+  /** Absent when the detail is read-only or the pull request is closed. */
+  commenting?: LineCommenting;
+  readOnly: boolean;
 }) {
   return (
     <Async resource={files}>
-      {(data) => <FilesPane pr={pr} files={data.files} truncated={data.truncated} threads={threads} />}
+      {(data) => (
+        <FilesPane
+          pr={pr}
+          files={data.files}
+          truncated={data.truncated}
+          threads={threads}
+          commenting={commenting}
+          readOnly={readOnly}
+        />
+      )}
     </Async>
   );
 }

@@ -5,9 +5,10 @@ import { Badge, DetailHeader, OpenInBrowser } from "../../components/ui";
 import type { PullRequest } from "../../lib/api";
 import { timeAgo } from "../../lib/format";
 import { useResource } from "../../lib/useResource";
-import { pullRequestApi, type PullRequestThread } from "./api";
+import { pullRequestApi, type LineSelection, type PullRequestThread } from "./api";
 import { checksApi } from "./checks";
 import { FilesTab } from "./Files";
+import type { LineCommenting } from "./Diff";
 import { statusBadge } from "./format";
 import { Overview, type PullRequestWrites } from "./Overview";
 import "./pullrequest.css";
@@ -39,6 +40,8 @@ export function PullRequestDetailView({ pullRequest, onBack }: PullRequestDetail
     () => ({
       readOnly,
       onVote: (vote: number) => pullRequestApi.vote({ project, repositoryId, id }, vote),
+      onLineComment: (selection: LineSelection, content: string) =>
+        pullRequestApi.lineComment({ project, repositoryId, id }, selection, content),
       onChanged: () => {
         reloadDetail();
         reloadThreads();
@@ -47,6 +50,14 @@ export function PullRequestDetailView({ pullRequest, onBack }: PullRequestDetail
     }),
     [readOnly, project, repositoryId, id, reloadDetail, reloadThreads],
   );
+
+  const lineCommenting: LineCommenting = useMemo(
+    () => ({ onComment: writes.onLineComment, onChanged: reloadThreads, onDenied: writes.onDenied }),
+    [writes, reloadThreads],
+  );
+  // Only open pull requests take new comments; wait for the detail to know.
+  const detailStatus = detail.data?.status;
+  const canComment = !readOnly && (detailStatus === "active" || detailStatus === "draft");
 
   const status = statusBadge(detail.data?.status ?? (pullRequest.isDraft ? "draft" : "active"));
   const fileCount = files.data?.files.length;
@@ -90,7 +101,13 @@ export function PullRequestDetailView({ pullRequest, onBack }: PullRequestDetail
         {tab === "overview" ? (
           <Overview detail={detail} threads={threads} checks={checks} writes={writes} />
         ) : (
-          <FilesTab pr={pullRequest} files={files} threads={threads.data ?? NO_THREADS} />
+          <FilesTab
+            pr={pullRequest}
+            files={files}
+            threads={threads.data ?? NO_THREADS}
+            commenting={canComment ? lineCommenting : undefined}
+            readOnly={readOnly}
+          />
         )}
       </div>
     </div>

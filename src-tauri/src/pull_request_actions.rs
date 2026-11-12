@@ -5,7 +5,8 @@
 //! body is built; error messages are fixed text and never contain what was sent.
 
 use reqwest::Method;
-use serde_json::{Value, json};
+use serde::Deserialize;
+use serde_json::{Map, Value, json};
 use tauri::State;
 
 use crate::AppState;
@@ -17,6 +18,31 @@ use crate::queries;
 
 /// The votes Azure DevOps accepts: approve, approve with suggestions, no vote, wait for author, reject.
 pub const VOTES: [i64; 5] = [10, 5, 0, -5, -10];
+pub const MAX_COMMENT_CHARS: usize = 4000;
+const MAX_PATH_CHARS: usize = 1024;
+const MAX_LINE: i64 = 1_000_000;
+const MAX_OFFSET: i64 = 100_000;
+
+/// Which version of the file the selected lines belong to: the changed one (`right`, added and
+/// unchanged lines) or the original one (`left`, deleted lines).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DiffSide {
+    Left,
+    Right,
+}
+
+/// A selected line range of one file, as sent by the diff view.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LineSelection {
+    pub file_path: String,
+    pub side: DiffSide,
+    pub start_line: i64,
+    pub end_line: i64,
+    /// Column just past the last selected character of `end_line` (1-based).
+    pub end_offset: i64,
+}
 
 // ---------------------------------------------------------------------------
 // Pure validation and payloads
@@ -28,6 +54,45 @@ pub fn vote_body(vote: i64) -> AppResult<Value> {
     } else {
         Err(AppError::InvalidChange("Unknown vote"))
     }
+}
+
+/// New active thread anchored to `selection`, with `content` as its first comment (Markdown,
+/// as typed, like the web).
+pub fn line_comment_body(selection: &LineSelection, content: &str) -> AppResult<Value> {
+    let content = content.trim();
+    if content.is_empty() {
+        return Err(AppError::InvalidChange("Write a comment first"));
+    }
+    if content.chars().count() > MAX_COMMENT_CHARS {
+        return Err(AppError::InvalidChange("Comments can have at most 4000 characters"));
+    }
+    let LineSelection { file_path, side, start_line, end_line, end_offset } = selection;
+    let path_ok = file_path.starts_with('/')
+        && file_path.chars().count() <= MAX_PATH_CHARS
+        && !file_path.chars().any(char::is_control);
+    if !path_ok {
+        return Err(AppError::InvalidChange("Unknown file"));
+    }
+    let range_ok = (1..=MAX_LINE).contains(start_line)
+        && (*start_line..=MAX_LINE).contains(end_line)
+        && (1..=MAX_OFFSET).contains(end_offset);
+    if !range_ok {
+        return Err(AppError::InvalidChange("Select the lines again"));
+    }
+
+    let prefix = match side {
+        DiffSide::Left => "left",
+        DiffSide::Right => "right",
+    };
+    let mut context = Map::new();
+    context.insert("filePath".into(), json!(file_path));
+    context.insert(format!("{prefix}FileStart"), json!({ "line": start_line, "offset": 1 }));
+    context.insert(format!("{prefix}FileEnd"), json!({ "line": end_line, "offset": end_offset }));
+    Ok(json!({
+        "comments": [{ "parentCommentId": 0, "content": content, "commentType": 1 }],
+        "status": 1,
+        "threadContext": context,
+    }))
 }
 
 /// Repository ids are GUIDs; anything else never reaches a URL.
@@ -100,6 +165,25 @@ pub async fn vote_pull_request(
     send_write(&client, Method::PUT, url, &body).await
 }
 
+/// Starts a comment thread on the selected lines of one file.
+#[tauri::command]
+pub async fn add_pull_request_line_comment(
+    state: State<'_, AppState>,
+    project: String,
+    repository_id: String,
+    id: i64,
+    selection: LineSelection,
+    content: String,
+) -> AppResult<()> {
+    let body = line_comment_body(&selection, &content)?;
+    let project = valid_project(&project)?;
+    let repository_id = valid_repository_id(&repository_id)?;
+    let id = valid_pull_request_id(id)?;
+    let client = current_client(&state)?;
+    let url = pr_url(&client, &project, &repository_id, id, &["threads"]);
+    send_write(&client, Method::POST, url, &body).await
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -119,6 +203,56 @@ mod tests {
             is_required: false,
             has_declined: false,
             is_group: false,
+        }
+    }
+
+    fn selection(side: DiffSide, start_line: i64, end_line: i64) -> LineSelection {
+        LineSelection { file_path: "/src/main.rs".into(), side, start_line, end_line, end_offset: 12 }
+    }
+
+    #[test]
+    fn line_comment_body_anchors_the_selected_side_and_lines() {
+        assert_eq!(
+            line_comment_body(&selection(DiffSide::Right, 3, 5), "  Looks **off**  ").unwrap(),
+            json!({
+                "comments": [{ "parentCommentId": 0, "content": "Looks **off**", "commentType": 1 }],
+                "status": 1,
+                "threadContext": {
+                    "filePath": "/src/main.rs",
+                    "rightFileStart": { "line": 3, "offset": 1 },
+                    "rightFileEnd": { "line": 5, "offset": 12 }
+                }
+            })
+        );
+        let left = line_comment_body(&selection(DiffSide::Left, 7, 7), "why?").unwrap();
+        assert_eq!(left["threadContext"]["leftFileStart"], json!({ "line": 7, "offset": 1 }));
+        assert_eq!(left["threadContext"]["leftFileEnd"], json!({ "line": 7, "offset": 12 }));
+        assert!(left["threadContext"].get("rightFileStart").is_none());
+    }
+
+    #[test]
+    fn line_comment_body_rejects_bad_text_without_echoing_it() {
+        let too_long = "x".repeat(MAX_COMMENT_CHARS + 1);
+        for content in ["", "   \n\t", too_long.as_str()] {
+            let err = line_comment_body(&selection(DiffSide::Right, 1, 1), content).unwrap_err();
+            assert!(matches!(err, AppError::InvalidChange(_)));
+            assert!(content.trim().is_empty() || !err.to_string().contains(content));
+        }
+        // The limit counts characters, not bytes.
+        assert!(line_comment_body(&selection(DiffSide::Right, 1, 1), &"é".repeat(MAX_COMMENT_CHARS)).is_ok());
+    }
+
+    #[test]
+    fn line_comment_body_rejects_bad_ranges_and_paths() {
+        let bad_ranges = [(0, 1, 1), (2, 1, 1), (1, MAX_LINE + 1, 1), (-1, 3, 1), (1, 1, 0), (1, 1, MAX_OFFSET + 1)];
+        for (start_line, end_line, end_offset) in bad_ranges {
+            let sel = LineSelection { end_offset, ..selection(DiffSide::Right, start_line, end_line) };
+            assert!(matches!(line_comment_body(&sel, "x"), Err(AppError::InvalidChange(_))), "{sel:?}");
+        }
+        let long_path = format!("/{}", "a".repeat(MAX_PATH_CHARS));
+        for file_path in ["", "src/main.rs", "/a\nb", "/a\u{0}b", long_path.as_str()] {
+            let sel = LineSelection { file_path: file_path.into(), ..selection(DiffSide::Right, 1, 1) };
+            assert!(matches!(line_comment_body(&sel, "x"), Err(AppError::InvalidChange(_))), "{file_path:?}");
         }
     }
 

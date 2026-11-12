@@ -3,7 +3,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { Avatar, Badge, RichText } from "../../components/ui";
 import { workItemTypeTone, stateTone } from "../../lib/format";
 import type { Resource } from "../../lib/useResource";
-import type { PullRequestDetail, PullRequestThread, Reviewer } from "./api";
+import type { LineSelection, PullRequestDetail, PullRequestThread, Reviewer } from "./api";
 import type { PullRequestChecks } from "./checks";
 import { ChecksSection } from "./ChecksSection";
 import { Async } from "./Async";
@@ -15,6 +15,7 @@ import { PullRequestReadOnlyHint, VoteControl } from "./Actions";
 export interface PullRequestWrites {
   readOnly: boolean;
   onVote: (vote: number) => Promise<void>;
+  onLineComment: (selection: LineSelection, content: string) => Promise<void>;
   onChanged: () => void;
   onDenied: () => void;
 }
