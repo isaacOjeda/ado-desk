@@ -1,10 +1,18 @@
 // Files tab: changed file list on the left, the selected file's diff (loaded on demand) on the right.
 import { memo, useCallback, useMemo, useRef, useState } from "react";
-import { Badge, EmptyState } from "../../components/ui";
+import { Badge, EmptyState, OpenInBrowser, RichText } from "../../components/ui";
 import type { PullRequest } from "../../lib/api";
 import { useResource, type Resource } from "../../lib/useResource";
-import { pullRequestApi, type FileChange, type FileDiff, type PullRequestFiles, type PullRequestThread } from "./api";
-import { DiffHeader, DiffView } from "./Diff";
+import {
+  isMarkdownFile,
+  previewObjectId,
+  pullRequestApi,
+  type FileChange,
+  type FileDiff,
+  type PullRequestFiles,
+  type PullRequestThread,
+} from "./api";
+import { DiffHeader, DiffView, type DiffMode } from "./Diff";
 import { Async } from "./Async";
 import { changeTypeBadge, directory, fileName, threadCountsByPath } from "./format";
 
@@ -56,6 +64,27 @@ const FileRow = memo(function FileRow({
   );
 });
 
+function PreviewView({ pr, objectId }: { pr: PullRequestRef; objectId: string }) {
+  const { project, repositoryId, id } = pr;
+  const preview = useResource(
+    useCallback(() => pullRequestApi.filePreview({ project, repositoryId, id }, objectId), [project, repositoryId, id, objectId]),
+  );
+  return (
+    <Async resource={preview}>
+      {(data) =>
+        data.tooLarge || data.binary ? (
+          <div className="diff-message">
+            <span>{data.tooLarge ? "This file is too large to preview here." : "Binary file not shown."}</span>
+            {data.tooLarge && <OpenInBrowser url={pr.url} />}
+          </div>
+        ) : (
+          <RichText className="diff-preview" html={data.html} />
+        )
+      }
+    </Async>
+  );
+}
+
 function DiffPanel({
   pr,
   file,
@@ -77,13 +106,20 @@ function DiffPanel({
   }, [cache, file, project, repositoryId, id]);
   const diff = useResource(fetcher);
   const fileThreads = useMemo(() => threads.filter((t) => t.kind === "file" && t.filePath === file.path), [threads, file.path]);
+  const previewId = isMarkdownFile(file.path) ? previewObjectId(file) : null;
+  const [mode, setMode] = useState<DiffMode>("diff");
+  const showPreview = previewId !== null && mode === "preview";
 
   return (
     <div className="pr-diff">
-      <DiffHeader file={file} diff={diff.data} />
-      <Async resource={diff}>
-        {(data) => <DiffView file={file} diff={data} threads={fileThreads} webUrl={pr.url} />}
-      </Async>
+      <DiffHeader file={file} diff={diff.data} mode={previewId ? mode : undefined} onModeChange={setMode} />
+      {showPreview ? (
+        <PreviewView pr={pr} objectId={previewId} />
+      ) : (
+        <Async resource={diff}>
+          {(data) => <DiffView file={file} diff={data} threads={fileThreads} webUrl={pr.url} />}
+        </Async>
+      )}
     </div>
   );
 }

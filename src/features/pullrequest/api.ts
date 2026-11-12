@@ -100,6 +100,23 @@ export interface FileDiff {
   tooLarge: boolean;
 }
 
+/** Rendered Markdown of one file version; `html` is sanitized in Rust. */
+export interface FilePreview {
+  html: string;
+  binary: boolean;
+  tooLarge: boolean;
+}
+
+/** Markdown files get a rendered preview next to their diff. */
+export function isMarkdownFile(path: string): boolean {
+  return /\.(md|markdown)$/i.test(path);
+}
+
+/** The blob to preview: the changed version, or the original one for a deleted file. */
+export function previewObjectId(file: FileChange): string | null {
+  return file.changeType === "delete" ? file.originalObjectId : file.objectId;
+}
+
 type PullRequestRef = Pick<PullRequest, "project" | "repositoryId" | "id">;
 
 const prArgs = ({ project, repositoryId, id }: PullRequestRef) => ({ project, repositoryId, id });
@@ -115,4 +132,6 @@ export const pullRequestApi = {
       objectId: file.objectId,
       originalObjectId: file.originalObjectId,
     }),
+  filePreview: (pr: PullRequestRef, objectId: string) =>
+    call<FilePreview>("get_pull_request_file_preview", { project: pr.project, repositoryId: pr.repositoryId, objectId }),
 };

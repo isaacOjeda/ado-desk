@@ -83,6 +83,10 @@ fn is_proxy_url(value: &str) -> bool {
 
 /// Sanitizes untrusted HTML and rewrites attachment images of `organization`.
 pub fn sanitize_html(html: &str, organization: &str) -> String {
+    sanitize(html, organization, ammonia::UrlRelative::PassThrough)
+}
+
+fn sanitize(html: &str, organization: &str, relative: ammonia::UrlRelative) -> String {
     let organization = organization.to_string();
     // The proxy scheme is deliberately NOT allowed: ammonia validates schemes before the
     // attribute filter, so only our own rewritten `src` values can carry it.
@@ -91,6 +95,7 @@ pub fn sanitize_html(html: &str, organization: &str) -> String {
     ammonia::Builder::default()
         .url_schemes(schemes)
         .link_rel(Some("noopener noreferrer"))
+        .url_relative(relative)
         .attribute_filter(move |element, attribute, value| {
             if element == "img" && attribute == "src" {
                 // Proxy URLs are only produced by us; never trust one coming from content.
@@ -110,19 +115,53 @@ pub fn sanitize_html(html: &str, organization: &str) -> String {
         .to_string()
 }
 
+/// Renders a repository Markdown file for a preview. Relative links and images point into the
+/// repository, which the webview cannot reach, so they are dropped instead of left broken.
+pub fn markdown_preview_html(markdown: &str, organization: &str) -> String {
+    sanitize(&render_markdown(markdown), organization, ammonia::UrlRelative::Deny)
+}
+
 /// Renders CommonMark (with tables, strikethrough and task lists) and sanitizes the result.
 pub fn markdown_to_html(markdown: &str, organization: &str) -> String {
+    sanitize_html(&render_markdown(markdown), organization)
+}
+
+fn render_markdown(markdown: &str) -> String {
     use pulldown_cmark::{Options, Parser, html};
 
     let options = Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS;
     let mut rendered = String::new();
     html::push_html(&mut rendered, Parser::new_ext(markdown, options));
-    sanitize_html(&rendered, organization)
+    rendered
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn markdown_preview_drops_relative_urls_and_scripts() {
+        let html = markdown_preview_html(
+            "# Title\n\n![logo](./img/logo.png) [docs](docs/a.md) [web](https://example.com)\n\n<script>alert(1)</script>",
+            ORG_FOR_PREVIEW,
+        );
+        assert!(html.contains("<h1>Title</h1>"), "{html}");
+        assert!(html.contains(r#"href="https://example.com""#), "{html}");
+        assert!(!html.contains("logo.png"), "{html}");
+        assert!(!html.contains("docs/a.md"), "{html}");
+        assert!(!html.contains("<script"), "{html}");
+    }
+
+    #[test]
+    fn markdown_preview_keeps_attachment_proxying() {
+        let html = markdown_preview_html(
+            &format!("![a](https://dev.azure.com/{ORG_FOR_PREVIEW}/_apis/wit/attachments/0f1e2d3c-4b5a-6978-8091-a2b3c4d5e6f7)"),
+            ORG_FOR_PREVIEW,
+        );
+        assert!(html.contains("adoimg"), "{html}");
+    }
+
+    const ORG_FOR_PREVIEW: &str = "contoso";
 
     const ATTACHMENT: &str =
         "https://dev.azure.com/contoso/b1c2/_apis/wit/attachments/1234-abcd?fileName=shot.png";

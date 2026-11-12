@@ -130,7 +130,20 @@ export function DiffView({
   );
 }
 
-export function DiffHeader({ file, diff }: { file: FileChange; diff: FileDiff | null }) {
+export type DiffMode = "diff" | "preview";
+
+export function DiffHeader({
+  file,
+  diff,
+  mode,
+  onModeChange,
+}: {
+  file: FileChange;
+  diff: FileDiff | null;
+  /** Set only for files that have a preview (Markdown). */
+  mode?: DiffMode;
+  onModeChange?: (mode: DiffMode) => void;
+}) {
   const badge = changeTypeBadge(file.changeType);
   return (
     <header className="diff-header">
@@ -142,6 +155,15 @@ export function DiffHeader({ file, diff }: { file: FileChange; diff: FileDiff | 
         <span className="diff-stats">
           <span className="diff-stat-add">+{diff.additions}</span>
           <span className="diff-stat-del">−{diff.deletions}</span>
+        </span>
+      )}
+      {mode && onModeChange && (
+        <span className="segmented" role="group" aria-label="View">
+          {(["diff", "preview"] as const).map((m) => (
+            <button key={m} className={mode === m ? "is-active" : ""} aria-pressed={mode === m} onClick={() => onModeChange(m)}>
+              {m === "diff" ? "Diff" : "Preview"}
+            </button>
+          ))}
         </span>
       )}
     </header>
