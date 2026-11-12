@@ -170,6 +170,8 @@ and text in a dialog: nothing is posted until you click *Post* (Cancel or Esc de
 unanswered request expires after 5 minutes). They need the same write scopes as the app's own
 actions (Code: Read & Write, Work Items: Read & Write).
 
+![Confirmation dialog: the assistant wants to post a reply on pull request 55, thread 7, with the exact text and Cancel or Post](docs/screenshots/assistant-confirm.png)
+
 So you can ask "summarize this pull request" or "what is left on this bug?" about whatever is on
 screen. The server listens on 127.0.0.1 only, on a random port, and requires a token created at
 each app launch, which reaches Claude Code only through the `ADO_DESK_MCP_TOKEN` environment
