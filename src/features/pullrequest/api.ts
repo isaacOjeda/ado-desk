@@ -28,6 +28,8 @@ export interface PullRequestDetail {
   repository: string;
   project: string;
   reviewers: Reviewer[];
+  /** The signed-in user's vote (0 when they have not voted). */
+  myVote: number;
   labels: string[];
   workItems: WorkItem[];
   url: string;
@@ -100,6 +102,36 @@ export interface FileDiff {
   tooLarge: boolean;
 }
 
+/** `right`: the changed version (added and unchanged lines); `left`: the original (deleted lines). */
+export type DiffSide = "left" | "right";
+
+/** Mirrors `pull_request_actions::LineSelection`. */
+export interface LineSelection {
+  filePath: string;
+  side: DiffSide;
+  startLine: number;
+  endLine: number;
+  /** Column just past the last selected character of `endLine` (1-based). */
+  endOffset: number;
+}
+
+/** Rendered Markdown of one file version; `html` is sanitized in Rust. */
+export interface FilePreview {
+  html: string;
+  binary: boolean;
+  tooLarge: boolean;
+}
+
+/** Markdown files get a rendered preview next to their diff. */
+export function isMarkdownFile(path: string): boolean {
+  return /\.(md|markdown)$/i.test(path);
+}
+
+/** The blob to preview: the changed version, or the original one for a deleted file. */
+export function previewObjectId(file: FileChange): string | null {
+  return file.changeType === "delete" ? file.originalObjectId : file.objectId;
+}
+
 type PullRequestRef = Pick<PullRequest, "project" | "repositoryId" | "id">;
 
 const prArgs = ({ project, repositoryId, id }: PullRequestRef) => ({ project, repositoryId, id });
@@ -115,4 +147,11 @@ export const pullRequestApi = {
       objectId: file.objectId,
       originalObjectId: file.originalObjectId,
     }),
+  /** Sets the signed-in user's vote: 10, 5, 0 (reset), -5 or -10. */
+  vote: (pr: PullRequestRef, vote: number) => call<void>("vote_pull_request", { ...prArgs(pr), vote }),
+  /** Starts a thread on the selected lines; `content` is Markdown, 1-4000 characters. */
+  lineComment: (pr: PullRequestRef, selection: LineSelection, content: string) =>
+    call<void>("add_pull_request_line_comment", { ...prArgs(pr), selection, content }),
+  filePreview: (pr: PullRequestRef, objectId: string) =>
+    call<FilePreview>("get_pull_request_file_preview", { project: pr.project, repositoryId: pr.repositoryId, objectId }),
 };

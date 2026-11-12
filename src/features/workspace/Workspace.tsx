@@ -24,6 +24,8 @@ import { recordRecent } from "../search/recents";
 import { requestQuickSearch } from "../search/events";
 import { InboxView } from "../inbox/InboxView";
 import { inboxApi, useInbox } from "../inbox/api";
+import { InboxFilterBar } from "../inbox/InboxFilterBar";
+import { useInboxFilter } from "../inbox/filter";
 import { activeViewId, viewsFor } from "../views/model";
 import { useSavedViews } from "../views/useSavedViews";
 import { useCheckSummaries } from "../pullrequest/checks";
@@ -144,6 +146,7 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
   };
   const active = view === "workItems" ? workItems : pullRequests;
   const inbox = useInbox();
+  const [inboxFilter, setInboxFilter] = useInboxFilter();
   const unread = inbox?.filter((item) => !item.read).length ?? 0;
 
   useEffect(() => {
@@ -260,7 +263,9 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
           )}
         </header>
 
-        {view === "inbox" ? null : view === "workItems" ? (
+        {view === "inbox" ? (
+          <InboxFilterBar filter={inboxFilter} onChange={setInboxFilter} items={inbox} />
+        ) : view === "workItems" ? (
           <WorkItemFilterBar
             key={organization}
             filter={workItemFilter}
@@ -281,7 +286,7 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
           {viewError && <ErrorBanner message={viewError} />}
           {view !== "inbox" && active.error && <ErrorBanner message={active.error.message} onRetry={active.reload} />}
           {view === "inbox" ? (
-            <InboxView items={inbox} query={query} />
+            <InboxView items={inbox} query={query} filter={inboxFilter} />
           ) : active.loading && !active.data ? (
             <div className="loading">
               <Spinner />

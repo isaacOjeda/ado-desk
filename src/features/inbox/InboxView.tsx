@@ -6,6 +6,7 @@ import { timeAgo } from "../../lib/format";
 import { ApiError } from "../../lib/api";
 import { requestOpen } from "../search/events";
 import { inboxApi, type InboxItem, type InboxKind } from "./api";
+import { countInboxFilters, matchesInboxFilter, type InboxFilter } from "./filter";
 import "./inbox.css";
 
 const ICONS: Record<InboxKind, string> = { reviewRequest: "⇄", assignment: "▤", comment: "✎" };
@@ -13,16 +14,19 @@ const ICONS: Record<InboxKind, string> = { reviewRequest: "⇄", assignment: "�
 interface Props {
   items: InboxItem[] | null;
   query: string;
+  filter: InboxFilter;
 }
 
 function message(err: unknown): string {
   return err instanceof ApiError ? err.message : "Something went wrong. Try again.";
 }
 
-export function InboxView({ items, query }: Props) {
+export function InboxView({ items, query, filter }: Props) {
   const [error, setError] = useState<string | null>(null);
   const q = query.trim().toLowerCase();
-  const visible = (items ?? []).filter((item) => !q || `${item.title} ${item.detail}`.toLowerCase().includes(q));
+  const visible = (items ?? []).filter(
+    (item) => matchesInboxFilter(item, filter) && (!q || `${item.title} ${item.detail}`.toLowerCase().includes(q)),
+  );
 
   const open = (item: InboxItem) => {
     setError(null);
@@ -41,8 +45,8 @@ export function InboxView({ items, query }: Props) {
     <>
       {error && <ErrorBanner message={error} />}
       {visible.length === 0 ? (
-        q ? (
-          <EmptyState title="Nothing matches this filter" />
+        q || countInboxFilters(filter) > 0 ? (
+          <EmptyState title="Nothing matches this filter" hint="Change or reset the filters above." />
         ) : (
           <EmptyState
             title="You're all caught up"

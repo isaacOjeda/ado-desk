@@ -1,8 +1,9 @@
-// Presentational unified diff with inline file threads. File contents are plain
-// text and are rendered as React text nodes only (never as HTML).
-import { Fragment, useMemo } from "react";
+// Unified diff with inline file threads and line selection for new comments. File contents
+// are plain text and are rendered as React text nodes only (never as HTML).
+import { Fragment, useMemo, useState } from "react";
 import { Badge, OpenInBrowser } from "../../components/ui";
-import type { DiffHunk, DiffLine, FileChange, FileDiff, PullRequestThread } from "./api";
+import type { DiffHunk, DiffLine, DiffSide, FileChange, FileDiff, LineSelection, PullRequestThread } from "./api";
+import { usePullRequestWrite } from "./Actions";
 import { changeTypeBadge } from "./format";
 import { ThreadCard } from "./Threads";
 
@@ -56,7 +57,158 @@ function InlineThreads({ threads }: { threads: PullRequestThread[] }) {
   );
 }
 
-function Hunk({ hunk, anchors }: { hunk: DiffHunk; anchors: Anchors }) {
+/** Commenting on selected lines; absent when the detail is read-only or the PR is closed. */
+export interface LineCommenting {
+  onComment: (selection: LineSelection, content: string) => Promise<void>;
+  onChanged: () => void;
+  onDenied: () => void;
+}
+
+/** Lines picked in one hunk: `anchor` is the first click, `focus` the shift-click end. */
+interface PickedLines {
+  hunk: number;
+  side: DiffSide;
+  anchor: number;
+  focus: number;
+}
+
+function sideLine(line: DiffLine, side: DiffSide): number | null {
+  if (side === "left") return line.kind !== "add" ? line.oldLine : null;
+  return line.kind !== "delete" ? line.newLine : null;
+}
+
+/** Indexes of the picked lines that exist on the picked side, in order. */
+function pickedIndexes(hunk: DiffHunk, picked: PickedLines): number[] {
+  const from = Math.min(picked.anchor, picked.focus);
+  const to = Math.max(picked.anchor, picked.focus);
+  const indexes: number[] = [];
+  for (let i = from; i <= to; i++) if (sideLine(hunk.lines[i], picked.side) !== null) indexes.push(i);
+  return indexes;
+}
+
+const MAX_COMMENT_CHARS = 4000;
+
+function toSelection(path: string, hunk: DiffHunk, picked: PickedLines): LineSelection | null {
+  const indexes = pickedIndexes(hunk, picked);
+  if (indexes.length === 0) return null;
+  const first = hunk.lines[indexes[0]];
+  const last = hunk.lines[indexes[indexes.length - 1]];
+  return {
+    filePath: path,
+    side: picked.side,
+    startLine: sideLine(first, picked.side)!,
+    endLine: sideLine(last, picked.side)!,
+    endOffset: Math.min([...last.text].length + 1, 100_000),
+  };
+}
+
+function LineCommentBox({
+  selection,
+  commenting,
+  onDone,
+}: {
+  selection: LineSelection;
+  commenting: LineCommenting;
+  onDone: () => void;
+}) {
+  const [text, setText] = useState("");
+  const { busy, error, run } = usePullRequestWrite(commenting.onChanged, commenting.onDenied);
+  const lines =
+    selection.startLine === selection.endLine
+      ? `line ${selection.startLine}`
+      : `lines ${selection.startLine}–${selection.endLine}`;
+  const tooLong = [...text.trim()].length > MAX_COMMENT_CHARS;
+
+  const save = async () => {
+    if (busy || text.trim() === "" || tooLong) return;
+    if (await run(() => commenting.onComment(selection, text))) onDone();
+  };
+
+  return (
+    <div className="diff-comment-box">
+      <label className="diff-comment-label" htmlFor="diff-comment">
+        Comment on {selection.side === "left" ? "original " : ""}
+        {lines}
+      </label>
+      <textarea
+        id="diff-comment"
+        autoFocus
+        value={text}
+        disabled={busy}
+        placeholder="Write a comment (Markdown)…"
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void save();
+          if (e.key === "Escape") {
+            e.stopPropagation();
+            onDone();
+          }
+        }}
+      />
+      <div className="diff-comment-footer">
+        <button className="btn btn-sm btn-primary" onClick={() => void save()} disabled={busy || text.trim() === "" || tooLong}>
+          {busy ? "Saving…" : "Comment"}
+        </button>
+        <button className="btn btn-sm btn-ghost" onClick={onDone} disabled={busy}>
+          Cancel
+        </button>
+        {tooLong && <span className="pr-action-error">At most {MAX_COMMENT_CHARS} characters.</span>}
+        {error && (
+          <span className="pr-action-error" role="alert">
+            {error}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Gutter({
+  number,
+  side,
+  onPick,
+}: {
+  number: number | null;
+  side: DiffSide;
+  onPick?: (side: DiffSide, extend: boolean) => void;
+}) {
+  if (number === null || !onPick) return <span className="diff-gutter">{number ?? ""}</span>;
+  return (
+    <button
+      className="diff-gutter diff-gutter-pick"
+      title="Comment on this line (Shift+click to select a range)"
+      onClick={(e) => onPick(side, e.shiftKey)}
+    >
+      {number}
+    </button>
+  );
+}
+
+function Hunk({
+  hunk,
+  hunkIndex,
+  anchors,
+  path,
+  picked,
+  onPick,
+  commenting,
+  onClearPick,
+}: {
+  hunk: DiffHunk;
+  hunkIndex: number;
+  anchors: Anchors;
+  path: string;
+  picked: PickedLines | null;
+  onPick: (hunk: number, line: number, side: DiffSide, extend: boolean) => void;
+  commenting?: LineCommenting;
+  onClearPick: () => void;
+}) {
+  const mine = picked?.hunk === hunkIndex ? picked : null;
+  const indexes = mine ? pickedIndexes(hunk, mine) : [];
+  const selected = new Set(indexes);
+  const boxAfter = indexes.length ? indexes[indexes.length - 1] : -1;
+  const selection = mine && commenting ? toSelection(path, hunk, mine) : null;
+
   return (
     <div className="diff-hunk">
       <div className="diff-row diff-hunk-header">
@@ -68,17 +220,28 @@ function Hunk({ hunk, anchors }: { hunk: DiffHunk; anchors: Anchors }) {
       </div>
       {hunk.lines.map((line, index) => {
         const threads = threadsAfter(line, anchors);
+        const pick = commenting
+          ? (side: DiffSide, extend: boolean) => onPick(hunkIndex, index, side, extend)
+          : undefined;
         return (
           <Fragment key={index}>
-            <div className={`diff-row diff-${line.kind}`}>
-              <span className="diff-gutter">{line.oldLine ?? ""}</span>
-              <span className="diff-gutter">{line.newLine ?? ""}</span>
+            <div className={`diff-row diff-${line.kind}${selected.has(index) ? " is-picked" : ""}`}>
+              <Gutter number={sideLine(line, "left")} side="left" onPick={pick} />
+              <Gutter number={sideLine(line, "right")} side="right" onPick={pick} />
               <span className="diff-code">
                 <span className="diff-marker">{MARKERS[line.kind]}</span>
                 {line.text}
               </span>
             </div>
             {threads.length > 0 && <InlineThreads threads={threads} />}
+            {index === boxAfter && selection && commenting && (
+              <LineCommentBox
+                key={`${selection.side}:${selection.startLine}`}
+                selection={selection}
+                commenting={commenting}
+                onDone={onClearPick}
+              />
+            )}
           </Fragment>
         );
       })}
@@ -101,14 +264,23 @@ export function DiffView({
   diff,
   threads,
   webUrl,
+  commenting,
 }: {
   file: FileChange;
   diff: FileDiff;
   threads: PullRequestThread[];
   webUrl: string;
+  commenting?: LineCommenting;
 }) {
   const anchors = useMemo(() => anchorThreads(diff.hunks, threads), [diff, threads]);
   const message = emptyMessage(diff, file);
+  const [picked, setPicked] = useState<PickedLines | null>(null);
+
+  const onPick = (hunk: number, line: number, side: DiffSide, extend: boolean) => {
+    // Shift+click extends within the same hunk and side; anything else starts a new pick.
+    if (extend && picked && picked.hunk === hunk && picked.side === side) setPicked({ ...picked, focus: line });
+    else setPicked({ hunk, side, anchor: line, focus: line });
+  };
   return (
     <>
       {anchors.top.length > 0 && <InlineThreads threads={anchors.top} />}
@@ -121,7 +293,17 @@ export function DiffView({
         <div className="diff-scroll">
           <div className="diff-table">
             {diff.hunks.map((hunk, index) => (
-              <Hunk key={index} hunk={hunk} anchors={anchors} />
+              <Hunk
+                key={index}
+                hunk={hunk}
+                hunkIndex={index}
+                anchors={anchors}
+                path={file.path}
+                picked={picked}
+                onPick={onPick}
+                commenting={commenting}
+                onClearPick={() => setPicked(null)}
+              />
             ))}
           </div>
         </div>
@@ -130,7 +312,20 @@ export function DiffView({
   );
 }
 
-export function DiffHeader({ file, diff }: { file: FileChange; diff: FileDiff | null }) {
+export type DiffMode = "diff" | "preview";
+
+export function DiffHeader({
+  file,
+  diff,
+  mode,
+  onModeChange,
+}: {
+  file: FileChange;
+  diff: FileDiff | null;
+  /** Set only for files that have a preview (Markdown). */
+  mode?: DiffMode;
+  onModeChange?: (mode: DiffMode) => void;
+}) {
   const badge = changeTypeBadge(file.changeType);
   return (
     <header className="diff-header">
@@ -142,6 +337,15 @@ export function DiffHeader({ file, diff }: { file: FileChange; diff: FileDiff | 
         <span className="diff-stats">
           <span className="diff-stat-add">+{diff.additions}</span>
           <span className="diff-stat-del">−{diff.deletions}</span>
+        </span>
+      )}
+      {mode && onModeChange && (
+        <span className="segmented" role="group" aria-label="View">
+          {(["diff", "preview"] as const).map((m) => (
+            <button key={m} className={mode === m ? "is-active" : ""} aria-pressed={mode === m} onClick={() => onModeChange(m)}>
+              {m === "diff" ? "Diff" : "Preview"}
+            </button>
+          ))}
         </span>
       )}
     </header>

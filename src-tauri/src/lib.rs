@@ -6,6 +6,7 @@ mod credentials;
 mod error;
 mod image_proxy;
 mod notifications;
+mod pull_request_actions;
 mod pull_requests;
 mod queries;
 mod rich_text;
@@ -108,6 +109,9 @@ pub fn run() {
             pull_requests::list_pull_request_threads,
             pull_requests::list_pull_request_files,
             pull_requests::get_pull_request_file_diff,
+            pull_requests::get_pull_request_file_preview,
+            pull_request_actions::vote_pull_request,
+            pull_request_actions::add_pull_request_line_comment,
             checks::get_pull_request_checks,
             checks::pull_request_check_summaries,
             queries::query_work_items,

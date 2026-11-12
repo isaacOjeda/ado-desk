@@ -3,12 +3,22 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { Avatar, Badge, RichText } from "../../components/ui";
 import { workItemTypeTone, stateTone } from "../../lib/format";
 import type { Resource } from "../../lib/useResource";
-import type { PullRequestDetail, PullRequestThread, Reviewer } from "./api";
+import type { LineSelection, PullRequestDetail, PullRequestThread, Reviewer } from "./api";
 import type { PullRequestChecks } from "./checks";
 import { ChecksSection } from "./ChecksSection";
 import { Async } from "./Async";
 import { mergeStatus, reviewerVote } from "./format";
 import { Discussion } from "./Threads";
+import { PullRequestReadOnlyHint, VoteControl } from "./Actions";
+
+/** Write hooks of the detail; absent pieces render read-only. */
+export interface PullRequestWrites {
+  readOnly: boolean;
+  onVote: (vote: number) => Promise<void>;
+  onLineComment: (selection: LineSelection, content: string) => Promise<void>;
+  onChanged: () => void;
+  onDenied: () => void;
+}
 
 function ReviewerRow({ reviewer }: { reviewer: Reviewer }) {
   const vote = reviewerVote(reviewer.vote, reviewer.hasDeclined);
@@ -26,10 +36,30 @@ function ReviewerRow({ reviewer }: { reviewer: Reviewer }) {
   );
 }
 
-function Aside({ detail, checks }: { detail: PullRequestDetail; checks: Resource<PullRequestChecks> }) {
+function Aside({
+  detail,
+  checks,
+  writes,
+}: {
+  detail: PullRequestDetail;
+  checks: Resource<PullRequestChecks>;
+  writes: PullRequestWrites;
+}) {
   const merge = mergeStatus(detail.mergeStatus);
+  const open = detail.status === "active" || detail.status === "draft";
   return (
     <aside className="detail-aside">
+      {open && (
+        <section>
+          <h3 className="section-title">Vote</h3>
+          {writes.readOnly ? (
+            <PullRequestReadOnlyHint />
+          ) : (
+            <VoteControl myVote={detail.myVote} onVote={writes.onVote} onChanged={writes.onChanged} onDenied={writes.onDenied} />
+          )}
+        </section>
+      )}
+
       <ChecksSection checks={checks} />
 
       <section>
@@ -90,10 +120,12 @@ export function Overview({
   detail,
   threads,
   checks,
+  writes,
 }: {
   detail: Resource<PullRequestDetail>;
   threads: Resource<PullRequestThread[]>;
   checks: Resource<PullRequestChecks>;
+  writes: PullRequestWrites;
 }) {
   return (
     <Async resource={detail}>
@@ -113,7 +145,7 @@ export function Overview({
               <Async resource={threads}>{(list) => <Discussion threads={list} />}</Async>
             </section>
           </div>
-          <Aside detail={pr} checks={checks} />
+          <Aside detail={pr} checks={checks} writes={writes} />
         </div>
       )}
     </Async>

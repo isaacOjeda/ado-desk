@@ -16,7 +16,7 @@ use crate::azdo::AzdoClient;
 use crate::azdo::model::{self, ListResponse, RawIdentity, RawWorkItem, WorkItem};
 use crate::commands::current_client;
 use crate::error::{AppError, AppResult};
-use crate::rich_text::markdown_to_html;
+use crate::rich_text::{markdown_preview_html, markdown_to_html};
 
 /// Each side of a diff is capped; beyond it the UI points to the web instead.
 pub const MAX_DIFF_SIDE_BYTES: usize = 512 * 1024;
@@ -71,6 +71,8 @@ pub struct PullRequestDetail {
     pub repository: String,
     pub project: String,
     pub reviewers: Vec<Reviewer>,
+    /// The signed-in user's vote (0 when they have not voted or are not a reviewer).
+    pub my_vote: i64,
     pub labels: Vec<String>,
     pub work_items: Vec<WorkItem>,
     pub url: String,
@@ -179,6 +181,16 @@ pub struct FileDiff {
     pub hunks: Vec<DiffHunk>,
     pub additions: usize,
     pub deletions: usize,
+    pub binary: bool,
+    pub too_large: bool,
+}
+
+/// Rendered preview of one version of a Markdown file.
+#[derive(Debug, Clone, Default, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FilePreview {
+    /// Sanitized HTML; empty when the file is binary or too large.
+    pub html: String,
     pub binary: bool,
     pub too_large: bool,
 }
@@ -433,6 +445,7 @@ pub fn map_detail(organization: &str, raw: RawPullRequestDetail, work_items: Vec
         repository,
         project,
         reviewers,
+        my_vote: 0,
         labels: raw.labels.into_iter().filter(|l| l.active).map(|l| l.name).collect(),
         work_items,
         url: url.to_string(),
@@ -739,7 +752,9 @@ pub async fn get_pull_request(
         linked_work_items(&client, &project, &repository_id, id)
     );
     // Linked work items are secondary: show the pull request even if they fail.
-    Ok(map_detail(client.org(), raw?, work_items.unwrap_or_default()))
+    let mut detail = map_detail(client.org(), raw?, work_items.unwrap_or_default());
+    detail.my_vote = crate::pull_request_actions::my_vote(&detail.reviewers, &client.session().user_id);
+    Ok(detail)
 }
 
 #[tauri::command]
@@ -830,6 +845,36 @@ impl Blob {
     }
 }
 
+/// Maps a fetched blob to its Markdown preview. Same size cap and text rules as the diff.
+fn file_preview(blob: Blob, organization: &str) -> FilePreview {
+    match blob {
+        Blob::Missing => FilePreview::default(),
+        Blob::TooLarge => FilePreview { too_large: true, ..FilePreview::default() },
+        Blob::Bytes(bytes) => match decode_text(&bytes) {
+            Some(text) => FilePreview { html: markdown_preview_html(text, organization), ..FilePreview::default() },
+            None => FilePreview { binary: true, ..FilePreview::default() },
+        },
+    }
+}
+
+/// Rendered Markdown of one file version. The blob id comes from [`list_pull_request_files`].
+#[tauri::command]
+pub async fn get_pull_request_file_preview(
+    state: State<'_, AppState>,
+    project: String,
+    repository_id: String,
+    object_id: String,
+) -> AppResult<FilePreview> {
+    let sha = valid_object_id(Some(&object_id)).ok_or(AppError::NotFound)?;
+    let client = current_client(&state)?;
+    let blob = blob(&client, &project, &repository_id, Some(&sha)).await?;
+    let organization = client.org().to_string();
+    // Markdown rendering and sanitizing up to 512 KB is CPU work: keep it off the async workers.
+    tauri::async_runtime::spawn_blocking(move || file_preview(blob, &organization))
+        .await
+        .map_err(|err| AppError::Decode(err.to_string()))
+}
+
 fn is_zero_sha(sha: &str) -> bool {
     sha.chars().all(|c| c == '0')
 }
@@ -844,6 +889,17 @@ mod tests {
     use serde_json::{Value, json};
 
     const SHA_A: &str = "61a86fdaa79e5c6f5fb6e4026508489feb6ed92c";
+
+    #[test]
+    fn file_preview_renders_text_and_flags_binary_or_large_files() {
+        let preview = file_preview(Blob::Bytes(b"\xef\xbb\xbf# Hi\n\n<script>x</script>".to_vec()), "org");
+        assert_eq!(preview.html.trim(), "<h1>Hi</h1>");
+        assert!(!preview.binary && !preview.too_large);
+
+        assert_eq!(file_preview(Blob::Bytes(vec![b'a', 0]), "org"), FilePreview { binary: true, ..FilePreview::default() });
+        assert_eq!(file_preview(Blob::TooLarge, "org"), FilePreview { too_large: true, ..FilePreview::default() });
+        assert_eq!(file_preview(Blob::Missing, "org"), FilePreview::default());
+    }
     const SHA_B: &str = "0123456789abcdef0123456789abcdef01234567";
 
     fn raw_detail(extra: Value) -> RawPullRequestDetail {
