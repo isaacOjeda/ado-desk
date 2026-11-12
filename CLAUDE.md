@@ -33,6 +33,7 @@ There is no frontend test runner; frontend checks are `tsc --noEmit` and `pnpm b
 - `queries.rs` — filtered lists and filter lookups. WIQL / PR criteria are built by pure functions; every user value goes through `escape_literal` before reaching a WIQL string.
 - `rich_text.rs` — all HTML/Markdown sanitization (ammonia, pulldown-cmark) happens in Rust. Attachment image `src` is rewritten to `adoimg://`, served by `image_proxy.rs`, which only fetches attachment paths of the active organization (one org's PAT is never sent to another).
 - `themes/` — Open VSX theme import, the only network call outside Azure DevOps: own HTTP client (HTTPS, open-vsx.org links only, size caps), in-memory vsix reader (JSONC, `include`), VS Code `colors` -> `ThemeColors` mapping (`vscode.rs`, mirrors the `vscode` column in `src/themes/types.ts`), and `imported-themes.json` store broadcast via `themes-changed`. Every imported color is strict `#rrggbb(aa)`.
+- `assistant/` — Assistant panel (phase 7): `launch.rs` holds pure helpers (login-shell PATH, `claude` lookup, UTF-8 chunking), `terminal.rs` runs one PTY session (`portable-pty`) of the user's own unmodified `claude` and streams output over a Tauri `Channel`. The app never touches Claude credentials; sessions start in Settings > Assistant's folder or `{app data}/assistant`.
 - `settings.rs` — JSON in the app config dir; shape mirrors `src/lib/settings.ts`. Loading never fails (defaults on missing/corrupt), saving is atomic (temp + rename).
 
 **Frontend (`src/`)**
