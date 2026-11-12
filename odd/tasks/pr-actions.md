@@ -21,3 +21,4 @@ Branch: feat/improvements · Delivery: ask-on-risk · Test runner: `cargo test` 
 - L2 Branch feat/improvements created from main a15715b; Inbox filters committed as 8d313f3 and pushed.
 - L3 Route evidence: units share the PR detail files (Files.tsx, Diff.tsx, pull_requests.rs, client.rs), so no parallel writers; inline, one commit per task.
 - L4 (2026-11-11) Independent verifier (item 2): S1-S6 PASS, S7 PARTIAL (missing note in detail-views S8, fixed). No blockers. Advisories kept: line comments reload threads only; preview does not validate project/repositoryId (same as the baseline diff command); endOffset counts code points, not UTF-16 units; resetting a vote adds you as an optional reviewer.
+- L5 (2026-11-12) Native review of 8d313f3..678e18c (escalated item 2; lenses risk, reliability): consent granted by the user, approved, acknowledged (authority burned).
