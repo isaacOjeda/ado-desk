@@ -53,11 +53,15 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onOpenSettings: () => void;
+  /** Text to type into the session (not sent), once it runs; `seq` tells repeated asks apart. */
+  prompt: { text: string; seq: number } | null;
+  onPromptTyped: () => void;
 }
 
-export function AssistantPanel({ open, onClose, onOpenSettings }: Props) {
+export function AssistantPanel({ open, onClose, onOpenSettings, prompt, onPromptTyped }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
+  const sessionRef = useRef<number | null>(null);
   const [status, setStatus] = useState<Status>({ kind: "starting" });
   const [run, setRun] = useState(0);
   const [height, setHeight] = useState(savedHeight);
@@ -104,6 +108,7 @@ export function AssistantPanel({ open, onClose, onOpenSettings }: Props) {
           return;
         }
         id = sessionId;
+        sessionRef.current = sessionId;
         // A host that was hidden (after a failure) or resized during startup measures now.
         fit.fit();
         if (terminal.cols !== started.cols || terminal.rows !== started.rows) {
@@ -136,6 +141,7 @@ export function AssistantPanel({ open, onClose, onOpenSettings }: Props) {
       input.dispose();
       resize.dispose();
       if (id !== null) assistantApi.stop(id).catch(() => {});
+      sessionRef.current = null;
       terminalRef.current = null;
       terminal.dispose();
     };
@@ -144,6 +150,17 @@ export function AssistantPanel({ open, onClose, onOpenSettings }: Props) {
   useEffect(() => {
     if (open) terminalRef.current?.focus();
   }, [open]);
+
+  // Typed only while the session runs; otherwise it waits (starting) or is dropped (ended).
+  useEffect(() => {
+    if (!prompt || status.kind === "starting") return;
+    const id = sessionRef.current;
+    if (status.kind === "running" && id !== null) {
+      assistantApi.write(id, prompt.text).catch(() => {});
+      terminalRef.current?.focus();
+    }
+    onPromptTyped();
+  }, [prompt, status.kind, onPromptTyped]);
 
   const startResize = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();

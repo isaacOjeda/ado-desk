@@ -7,6 +7,8 @@ import { workItemApi } from "./api";
 import { Discussion, LoadingBody, NotFoundBody, WorkItemForm, WorkItemMeta } from "./WorkItemSections";
 import { CommentBox, OwnComment, ReadOnlyHint, WorkItemActionsBar, useWriteAccess, type Me } from "./WorkItemActions";
 import "./workitem.css";
+import { AskAssistant } from "../assistant/AskAssistant";
+import { workItemPrompt } from "../assistant/events";
 
 export interface WorkItemDetailViewProps {
   /** Row the user clicked; use it to render the header instantly while details load. */
@@ -44,7 +46,12 @@ export function WorkItemDetailView({ workItem, onBack, me }: WorkItemDetailViewP
           </>
         }
         title={item?.title ?? workItem.title}
-        actions={<OpenInBrowser url={item?.url ?? workItem.url} />}
+        actions={
+          <>
+            <AskAssistant prompt={workItemPrompt(workItem.id)} />
+            <OpenInBrowser url={item?.url ?? workItem.url} />
+          </>
+        }
       >
         <WorkItemMeta
           state={item?.state ?? workItem.state}

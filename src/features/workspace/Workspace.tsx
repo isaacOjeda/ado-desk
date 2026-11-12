@@ -31,6 +31,7 @@ import { useSavedViews } from "../views/useSavedViews";
 import { useCheckSummaries } from "../pullrequest/checks";
 import { AssistantPanel } from "../assistant/AssistantPanel";
 import { assistantApi, type ViewContext } from "../assistant/api";
+import { onAskAssistant } from "../assistant/events";
 
 interface Props {
   session: Session;
@@ -74,6 +75,16 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
   // The panel mounts on first open and then stays mounted, so hiding it keeps the session.
   const [assistant, setAssistant] = useState<"never" | "open" | "hidden">("never");
   const toggleAssistant = useCallback(() => setAssistant((current) => (current === "open" ? "hidden" : "open")), []);
+  // A prompt from "Ask" waits here until the panel's session can take it.
+  const [assistantPrompt, setAssistantPrompt] = useState<{ text: string; seq: number } | null>(null);
+  useEffect(
+    () =>
+      onAskAssistant((text) => {
+        setAssistant("open");
+        setAssistantPrompt((current) => ({ text, seq: (current?.seq ?? 0) + 1 }));
+      }),
+    [],
+  );
   const organization = session.organization;
 
   // Every opened item becomes a quick search "recent".
@@ -346,6 +357,8 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
             open={assistant === "open"}
             onClose={() => setAssistant("hidden")}
             onOpenSettings={openSettings}
+            prompt={assistantPrompt}
+            onPromptTyped={() => setAssistantPrompt(null)}
           />
         )}
       </main>

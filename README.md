@@ -143,6 +143,10 @@ credentials. Install Claude Code from https://code.claude.com/docs first.
   exact path in Settings > Assistant when it lives elsewhere.
 - Sessions start in an empty folder owned by ADO Desk (in its app data directory), or in the
   folder set in Settings > Assistant. Claude Code can read and change files in that folder.
+- **✦ Ask** in a work item or pull request header opens the panel and types "About work item
+  123, open in ADO Desk: " (or the pull request equivalent) without sending it, so you finish the
+  question. Only the id is typed: titles are written by other people, so Claude reads them through
+  its tools instead of your prompt.
 - Hiding the panel keeps the session; *Restart* ends it and starts a new one. Switching
   organization or quitting ADO Desk ends it.
 
