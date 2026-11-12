@@ -290,8 +290,9 @@ pub fn parse_tool_call(params: &Value) -> Result<ToolCall, &'static str> {
             if args.id <= 0 {
                 return Err("Unknown work item");
             }
-            crate::work_item_actions::comment_html(&args.text).map_err(fixed_text)?;
-            Ok(ToolCall::CommentOnWorkItem { project, id: args.id, text: args.text.trim().to_string() })
+            // The dialog shows the cleaned text that `add_work_item_comment` will store.
+            let text = crate::work_item_actions::comment_text(&args.text).map_err(fixed_text)?;
+            Ok(ToolCall::CommentOnWorkItem { project, id: args.id, text })
         }
         _ => Err(UNKNOWN_TOOL),
     }
@@ -506,6 +507,24 @@ mod tests {
         assert_eq!(comment(json!({ "project": "Web", "id": 9, "text": "" })), Err("Comments need 1 to 4000 characters"));
         assert_eq!(comment(json!({ "project": "Web", "id": 0, "text": "x" })), Err("Unknown work item"));
         assert_eq!(comment(json!({ "project": "Web", "id": 9 })), Err("Expected { project, id, text }"));
+    }
+
+    #[test]
+    fn the_dialog_shows_the_work_item_comment_as_sent() {
+        for text in ["Shipped \u{1F469}\u{200D}\u{1F4BB}", "line\u{2028}sep", "\u{202E}abc", "a\r\nb", "\u{7}  hi"] {
+            let Ok(ToolCall::CommentOnWorkItem { text: shown, .. }) = parse_tool_call(
+                &json!({ "name": "add_work_item_comment", "arguments": { "project": "Web", "id": 9, "text": text } }),
+            ) else {
+                panic!("{text:?} was rejected");
+            };
+            // What the dialog shows must be exactly what is sent: sending it again drops nothing.
+            let sent = crate::work_item_actions::comment_html(text).unwrap();
+            let escaped: Vec<String> = shown
+                .split('\n')
+                .map(|l| l.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;").replace('\'', "&#39;"))
+                .collect();
+            assert_eq!(sent, escaped.join("<br>"), "{text:?}");
+        }
     }
 
     #[test]

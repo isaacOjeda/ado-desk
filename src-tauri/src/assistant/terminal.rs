@@ -340,12 +340,15 @@ pub fn assistant_set_view(
     view: Option<ViewContext>,
 ) -> AppResult<()> {
     let organization = crate::commands::current_client(&app_state).ok().map(|client| client.org().to_string());
-    let recorded = match (view, organization) {
-        (Some(view), Some(organization)) => Some((organization, context::validate(view)?)),
+    // A rejected view clears the previous one: `current_view` must never describe a page the
+    // user already left.
+    let validated = view.map(context::validate).transpose();
+    let recorded = match (&validated, organization) {
+        (Ok(Some(view)), Some(organization)) => Some((organization, view.clone())),
         _ => None,
     };
     *state.view.lock().unwrap_or_else(|e| e.into_inner()) = recorded;
-    Ok(())
+    validated.map(|_| ())
 }
 
 #[cfg(test)]

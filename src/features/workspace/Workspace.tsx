@@ -32,7 +32,6 @@ import { useCheckSummaries } from "../pullrequest/checks";
 import { AssistantPanel } from "../assistant/AssistantPanel";
 import { assistantApi, type ViewContext } from "../assistant/api";
 import { onAskAssistant } from "../assistant/events";
-import { ConfirmWrite } from "../assistant/ConfirmWrite";
 
 interface Props {
   session: Session;
@@ -364,7 +363,6 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
           />
         )}
       </main>
-      <ConfirmWrite />
     </div>
   );
 }

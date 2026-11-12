@@ -93,11 +93,13 @@ fn json_response(status: StatusCode, body: &Value) -> Response<Full<Bytes>> {
 
 async fn handle(request: Request<Body>, info: ServerInfo, runner: ToolRunner) -> Result<Response<Full<Bytes>>, Infallible> {
     let header = |name| request.headers().get(name).and_then(|v: &HeaderValue| v.to_str().ok());
+    // Any Origin header counts, even one that is not valid UTF-8.
+    let origin = request.headers().contains_key(ORIGIN).then_some("present");
     let checked = mcp::check_request(
         request.method().as_str(),
         request.uri().path(),
         header(HOST),
-        header(ORIGIN),
+        origin,
         header(AUTHORIZATION),
         info.port,
         &info.token,
@@ -376,6 +378,21 @@ mod tests {
         let output = tokio::task::spawn_blocking(move || command.output()).await.unwrap().unwrap();
         let stdout = String::from_utf8_lossy(&output.stdout);
         assert!(stdout.contains("CurrentView"), "stdout: {stdout}\nstderr: {}", String::from_utf8_lossy(&output.stderr));
+    }
+
+    #[tokio::test]
+    async fn a_tool_call_notification_runs_nothing_and_null_origins_are_refused() {
+        let info = start_stub().await;
+        let note = r#"{"jsonrpc":"2.0","method":"tools/call","params":{"name":"add_work_item_comment","arguments":{"project":"Web","id":9,"text":"x"}}}"#;
+        assert_eq!(post(&info, note).send().await.unwrap().status(), 202);
+        let body = r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#;
+        assert_eq!(post(&info, body).header(ORIGIN, "null").send().await.unwrap().status(), 403);
+        // Browsers cannot send one, but a non-UTF-8 Origin is still an Origin.
+        let raw = HeaderValue::from_bytes(b"http://\xffevil").unwrap();
+        assert_eq!(post(&info, body).header(ORIGIN, raw).send().await.unwrap().status(), 403);
+        let ping = r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#;
+        let at_limit = format!("{ping}{}", " ".repeat(mcp::MAX_BODY_BYTES - ping.len()));
+        assert_eq!(post(&info, &at_limit).send().await.unwrap().status(), 200);
     }
 
     #[tokio::test]

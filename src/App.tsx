@@ -8,6 +8,7 @@ import { onOpenRequested, onQuickSearchRequested, requestQuickSearch } from "./f
 import { searchApi, type SearchHit } from "./features/search/api";
 import { isHit } from "./features/search/recents";
 import { Spinner } from "./components/ui";
+import { ConfirmWrite } from "./features/assistant/ConfirmWrite";
 import "./styles.css";
 
 type AuthState =
@@ -169,6 +170,8 @@ export default function App() {
             openRequest={openRequest}
             onOpenHandled={openHandled}
           />
+          {/* Outside the keyed Workspace: an organization switch must not drop a pending request. */}
+          <ConfirmWrite />
           {openError && (
             <div className="qs-toast" role="alert">
               <span>{openError}</span>

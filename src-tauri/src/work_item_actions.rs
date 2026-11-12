@@ -34,6 +34,15 @@ const COMMENTS_API_VERSION: &str = "7.1-preview.4";
 /// (line breaks kept), trimmed, 1 to [`MAX_COMMENT_CHARS`] characters, escaped, lines joined
 /// with `<br>`.
 pub fn comment_html(input: &str) -> AppResult<String> {
+    let text = comment_text(input)?;
+    let lines: Vec<String> = text.split('\n').map(escape_html).collect();
+    Ok(lines.join("<br>"))
+}
+
+/// The comment text as it will be stored, before escaping: control and format characters
+/// removed (line breaks kept), trimmed, 1 to [`MAX_COMMENT_CHARS`] characters. Previews of a
+/// comment show this, so they match what is sent.
+pub fn comment_text(input: &str) -> AppResult<String> {
     let cleaned: String = input
         .chars()
         .filter(|c| (*c == '\n' || !c.is_control()) && !is_format_char(*c))
@@ -45,8 +54,7 @@ pub fn comment_html(input: &str) -> AppResult<String> {
             "Comments need 1 to 4000 characters",
         ));
     }
-    let lines: Vec<String> = text.split('\n').map(escape_html).collect();
-    Ok(lines.join("<br>"))
+    Ok(text.to_string())
 }
 
 /// Plain text of a stored comment, when the app can edit it without dropping anything: HTML
