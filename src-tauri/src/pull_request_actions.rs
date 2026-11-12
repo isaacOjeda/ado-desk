@@ -89,7 +89,7 @@ pub fn thread_status_body(status: &str) -> AppResult<Value> {
     Ok(json!({ "status": code }))
 }
 
-fn valid_thread_id(thread_id: i64) -> AppResult<i64> {
+pub(crate) fn valid_thread_id(thread_id: i64) -> AppResult<i64> {
     if (1..=i64::from(i32::MAX)).contains(&thread_id) {
         Ok(thread_id)
     } else {

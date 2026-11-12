@@ -60,6 +60,7 @@ pub fn run() {
         .manage(AppState::default())
         .manage(search::SearchState::default())
         .manage(assistant::AssistantState::default())
+        .manage(assistant::confirm::Confirmations::default())
         .setup(|app| {
             let path = app.path().app_config_dir()?.join(settings::FILE_NAME);
             app.manage(settings::SettingsState::load(path));
@@ -143,6 +144,7 @@ pub fn run() {
             assistant::terminal::assistant_resize,
             assistant::terminal::assistant_stop,
             assistant::terminal::assistant_set_view,
+            assistant::confirm::assistant_confirm,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -158,6 +158,13 @@ run without asking:
 - `get_work_item`: fields, description and the 20 most recent comments;
 - `get_pull_request`: details, reviewers and votes, comment threads and changed files.
 
+**Replies from Claude.** Two more tools post as you: `reply_to_pull_request_thread` (Markdown) and
+`add_work_item_comment` (plain text), 1-4000 characters each. They are never pre-allowed, so
+Claude Code asks for its own permission first, and ADO Desk then shows the exact action, target
+and text in a dialog: nothing is posted until you click *Post* (Cancel or Esc declines; an
+unanswered request expires after 5 minutes). They need the same write scopes as the app's own
+actions (Code: Read & Write, Work Items: Read & Write).
+
 So you can ask "summarize this pull request" or "what is left on this bug?" about whatever is on
 screen. The server listens on 127.0.0.1 only, on a random port, and requires a token created at
 each app launch, which reaches Claude Code only through the `ADO_DESK_MCP_TOKEN` environment

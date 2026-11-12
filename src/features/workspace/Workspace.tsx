@@ -32,6 +32,7 @@ import { useCheckSummaries } from "../pullrequest/checks";
 import { AssistantPanel } from "../assistant/AssistantPanel";
 import { assistantApi, type ViewContext } from "../assistant/api";
 import { onAskAssistant } from "../assistant/events";
+import { ConfirmWrite } from "../assistant/ConfirmWrite";
 
 interface Props {
   session: Session;
@@ -201,8 +202,9 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
         openSettings();
         return;
       }
-      // Keys typed in the assistant's terminal belong to it (Esc interrupts Claude there).
-      if (e.target instanceof Element && e.target.closest(".assistant-panel")) return;
+      // Keys typed in the assistant's terminal belong to it (Esc interrupts Claude there), and
+      // Esc in a dialog closes only the dialog.
+      if (e.target instanceof Element && e.target.closest(".assistant-panel, dialog")) return;
       if (e.key === "Escape" && selection) {
         // Leaving a comment box must not close the detail and drop what was typed.
         if (e.target instanceof HTMLTextAreaElement) {
@@ -362,6 +364,7 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
           />
         )}
       </main>
+      <ConfirmWrite />
     </div>
   );
 }

@@ -18,6 +18,7 @@ use hyper_util::rt::TokioIo;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 
+use super::confirm;
 use super::context;
 use super::mcp::{self, Incoming, ToolCall};
 use super::AssistantState;
@@ -152,9 +153,63 @@ fn data(value: Result<Value, AppError>) -> Value {
     }
 }
 
+fn active_organization(app: &AppHandle) -> Option<String> {
+    crate::commands::current_client(&app.state::<AppState>()).ok().map(|c| c.org().to_string())
+}
+
+/// Asks the user in the main window, then runs `write` only if they approved it and the same
+/// organization is still active.
+async fn confirmed_write<F>(app: &AppHandle, action: &str, target: String, text: &str, write: F) -> Value
+where
+    F: Future<Output = AppResult<()>>,
+{
+    let Some(organization) = active_organization(app) else {
+        return mcp::tool_text(mcp::tool_error(&AppError::NotSignedIn), true);
+    };
+    let request = confirm::WriteRequest {
+        id: 0,
+        action: action.to_string(),
+        target,
+        organization: organization.clone(),
+        text: text.to_string(),
+    };
+    match confirm::ask(app, request).await {
+        confirm::Outcome::Approved => {}
+        confirm::Outcome::Declined => return mcp::tool_text("The user declined it in ADO Desk; nothing was posted", true),
+        confirm::Outcome::Expired => {
+            return mcp::tool_text("Nobody confirmed it in ADO Desk in time; nothing was posted", true)
+        }
+    }
+    if active_organization(app).as_deref() != Some(organization.as_str()) {
+        return mcp::tool_text("The active organization changed in ADO Desk; nothing was posted", true);
+    }
+    match write.await {
+        Ok(()) => mcp::tool_text("Posted as the user", false),
+        Err(err) => mcp::tool_text(mcp::tool_error(&err), true),
+    }
+}
+
 async fn run_tool(app: &AppHandle, call: ToolCall) -> Value {
-    let organization = crate::commands::current_client(&app.state::<AppState>()).ok().map(|c| c.org().to_string());
+    let organization = active_organization(app);
     match call {
+        ToolCall::ReplyToThread { project, repository_id, id, thread_id, parent_comment_id, content } => {
+            let target = format!("Pull request {id} (project {project}), thread {thread_id}");
+            let write = crate::pull_request_actions::reply_to_pull_request_thread(
+                app.state(),
+                project,
+                repository_id,
+                id,
+                thread_id,
+                parent_comment_id,
+                content.clone(),
+            );
+            confirmed_write(app, "Reply to a pull request comment thread", target, &content, write).await
+        }
+        ToolCall::CommentOnWorkItem { project, id, text } => {
+            let target = format!("Work item {id} (project {project})");
+            let write = crate::work_item_actions::add_work_item_comment(app.state(), project, id, text.clone());
+            confirmed_write(app, "Comment on a work item", target, &text, write).await
+        }
         ToolCall::CurrentView => {
             let view = app.state::<AssistantState>().view();
             data(Ok(context::describe(view.as_ref(), organization.as_deref())))
@@ -242,7 +297,7 @@ mod tests {
         assert_eq!(notified.status(), 202);
 
         let listed: Value = post(&info, r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#).send().await.unwrap().json().await.unwrap();
-        assert_eq!(listed["result"]["tools"].as_array().unwrap().len(), 3);
+        assert_eq!(listed["result"]["tools"].as_array().unwrap().len(), 5);
 
         let called: Value = post(&info, r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_work_item","arguments":{"id":42}}}"#)
             .send()

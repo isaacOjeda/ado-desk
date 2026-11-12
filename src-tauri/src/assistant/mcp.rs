@@ -18,8 +18,11 @@ pub const UNKNOWN_TOOL: &str = "Unknown tool";
 pub const TOOL_CURRENT_VIEW: &str = "current_view";
 pub const TOOL_GET_WORK_ITEM: &str = "get_work_item";
 pub const TOOL_GET_PULL_REQUEST: &str = "get_pull_request";
+pub const TOOL_REPLY_TO_THREAD: &str = "reply_to_pull_request_thread";
+pub const TOOL_COMMENT_ON_WORK_ITEM: &str = "add_work_item_comment";
 /// Read tools: harmless, so the session runs them without asking.
 pub const READ_TOOLS: &[&str] = &[TOOL_CURRENT_VIEW, TOOL_GET_WORK_ITEM, TOOL_GET_PULL_REQUEST];
+
 
 /// Why a request is turned away before its body is read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -158,6 +161,41 @@ pub fn tools() -> Value {
             },
             "annotations": { "readOnlyHint": true },
         },
+        {
+            "name": TOOL_REPLY_TO_THREAD,
+            "title": "Reply to a pull request thread",
+            "description": "Posts a reply, as the user, in a comment thread of a pull request (Markdown, 1-4000 characters). ADO Desk first shows the exact text to the user, who must approve it; a declined or unanswered request posts nothing.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "project": { "type": "string" },
+                    "repositoryId": { "type": "string", "description": "Repository id, a GUID" },
+                    "id": { "type": "integer", "minimum": 1, "description": "Pull request id" },
+                    "threadId": { "type": "integer", "minimum": 1 },
+                    "parentCommentId": { "type": "integer", "minimum": 1, "description": "The thread's first comment (usually 1)" },
+                    "content": { "type": "string", "description": "Markdown text of the reply" },
+                },
+                "required": ["project", "repositoryId", "id", "threadId", "parentCommentId", "content"],
+                "additionalProperties": false,
+            },
+            "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true },
+        },
+        {
+            "name": TOOL_COMMENT_ON_WORK_ITEM,
+            "title": "Comment on a work item",
+            "description": "Adds a comment, as the user, to a work item (plain text, 1-4000 characters; line breaks are kept). ADO Desk first shows the exact text to the user, who must approve it; a declined or unanswered request posts nothing.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "project": { "type": "string" },
+                    "id": { "type": "integer", "minimum": 1, "description": "Work item id" },
+                    "text": { "type": "string", "description": "Plain text of the comment" },
+                },
+                "required": ["project", "id", "text"],
+                "additionalProperties": false,
+            },
+            "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true },
+        },
     ]})
 }
 
@@ -166,6 +204,28 @@ pub enum ToolCall {
     CurrentView,
     GetWorkItem { id: i64 },
     GetPullRequest { project: String, repository_id: String, id: i64 },
+    /// `content` is trimmed, as it will be sent.
+    ReplyToThread { project: String, repository_id: String, id: i64, thread_id: i64, parent_comment_id: i64, content: String },
+    CommentOnWorkItem { project: String, id: i64, text: String },
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ReplyArgs {
+    project: String,
+    repository_id: String,
+    id: i64,
+    thread_id: i64,
+    parent_comment_id: i64,
+    content: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WorkItemCommentArgs {
+    project: String,
+    id: i64,
+    text: String,
 }
 
 #[derive(Deserialize)]
@@ -202,7 +262,46 @@ pub fn parse_tool_call(params: &Value) -> Result<ToolCall, &'static str> {
                 .then_some(ToolCall::GetPullRequest { project, repository_id, id: args.id })
                 .ok_or("Unknown pull request")
         }
+        TOOL_REPLY_TO_THREAD => {
+            let args: ReplyArgs = serde_json::from_value(args)
+                .map_err(|_| "Expected { project, repositoryId, id, threadId, parentCommentId, content }")?;
+            let project = crate::pull_request_actions::valid_project(&args.project).map_err(|_| "Unknown project")?;
+            let repository_id =
+                crate::pull_request_actions::valid_repository_id(&args.repository_id).map_err(|_| "Unknown repository")?;
+            if args.id <= 0 {
+                return Err("Unknown pull request");
+            }
+            let thread_id = crate::pull_request_actions::valid_thread_id(args.thread_id).map_err(|_| "Unknown thread")?;
+            // The same checks the request body gets (text 1-4000 characters, parent comment id).
+            crate::pull_request_actions::reply_body(args.parent_comment_id, &args.content).map_err(fixed_text)?;
+            Ok(ToolCall::ReplyToThread {
+                project,
+                repository_id,
+                id: args.id,
+                thread_id,
+                parent_comment_id: args.parent_comment_id,
+                content: args.content.trim().to_string(),
+            })
+        }
+        TOOL_COMMENT_ON_WORK_ITEM => {
+            let args: WorkItemCommentArgs =
+                serde_json::from_value(args).map_err(|_| "Expected { project, id, text }")?;
+            let project = crate::pull_request_actions::valid_project(&args.project).map_err(|_| "Unknown project")?;
+            if args.id <= 0 {
+                return Err("Unknown work item");
+            }
+            crate::work_item_actions::comment_html(&args.text).map_err(fixed_text)?;
+            Ok(ToolCall::CommentOnWorkItem { project, id: args.id, text: args.text.trim().to_string() })
+        }
         _ => Err(UNKNOWN_TOOL),
+    }
+}
+
+/// The fixed message of a validation error (they never echo the input).
+fn fixed_text(err: crate::error::AppError) -> &'static str {
+    match err {
+        crate::error::AppError::InvalidChange(message) => message,
+        _ => "Invalid arguments",
     }
 }
 
@@ -226,6 +325,11 @@ pub fn tool_error(err: &crate::error::AppError) -> &'static str {
         AppError::NotFound => "Not found in the active organization",
         AppError::Unauthorized | AppError::Forbidden => "The token in ADO Desk cannot read this",
         AppError::Network(_) => "Azure DevOps could not be reached",
+        AppError::WriteDenied | AppError::PullRequestWriteDenied => {
+            "The token in ADO Desk cannot make this change (it lacks write access); nothing was posted"
+        }
+        AppError::WriteRejected => "Azure DevOps rejected the change; nothing was posted",
+        AppError::InvalidChange(message) => message,
         _ => "Azure DevOps could not return this",
     }
 }
@@ -308,7 +412,7 @@ mod tests {
     fn tools_are_listed_with_their_schemas() {
         let names: Vec<String> =
             tools()["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap().to_string()).collect();
-        assert_eq!(names, READ_TOOLS);
+        assert_eq!(names[..3], *READ_TOOLS);
     }
 
     #[test]
@@ -347,6 +451,68 @@ mod tests {
         assert_eq!(tool_error(&AppError::Network("dns for 10.0.0.5".into())), "Azure DevOps could not be reached");
         assert_eq!(tool_error(&AppError::NotFound), "Not found in the active organization");
         assert_eq!(tool_error(&AppError::NotSignedIn), "ADO Desk is not signed in to an organization");
+    }
+
+    const REPO: &str = "0f2a8c3e-1b2c-4d5e-8f90-123456789abc";
+    /// Write tools are never pre-allowed: they stay out of `READ_TOOLS` (`--allowedTools`).
+    const WRITE_TOOLS: &[&str] = &[TOOL_REPLY_TO_THREAD, TOOL_COMMENT_ON_WORK_ITEM];
+
+    #[test]
+    fn write_tools_are_listed_after_the_read_tools() {
+        let names: Vec<String> =
+            tools()["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap().to_string()).collect();
+        assert_eq!(names[3..], *WRITE_TOOLS);
+        for tool in WRITE_TOOLS {
+            assert!(!READ_TOOLS.contains(tool));
+        }
+    }
+
+    #[test]
+    fn write_calls_are_validated_like_the_app_writes() {
+        let reply = parse_tool_call(&json!({ "name": "reply_to_pull_request_thread", "arguments": {
+            "project": "Web", "repositoryId": REPO, "id": 7, "threadId": 3, "parentCommentId": 1, "content": "  Looks good  " } }))
+        .unwrap();
+        assert_eq!(
+            reply,
+            ToolCall::ReplyToThread {
+                project: "Web".into(),
+                repository_id: REPO.into(),
+                id: 7,
+                thread_id: 3,
+                parent_comment_id: 1,
+                content: "Looks good".into()
+            }
+        );
+        let comment = parse_tool_call(&json!({ "name": "add_work_item_comment", "arguments": { "project": "Web", "id": 9, "text": "Done\n" } })).unwrap();
+        assert_eq!(comment, ToolCall::CommentOnWorkItem { project: "Web".into(), id: 9, text: "Done".into() });
+    }
+
+    #[test]
+    fn bad_write_calls_get_fixed_messages() {
+        let reply = |args: Value| parse_tool_call(&json!({ "name": "reply_to_pull_request_thread", "arguments": args }));
+        let base = json!({ "project": "Web", "repositoryId": REPO, "id": 7, "threadId": 3, "parentCommentId": 1, "content": "ok" });
+        let with = |key: &str, value: Value| {
+            let mut args = base.clone();
+            args[key] = value;
+            args
+        };
+        assert_eq!(reply(with("content", json!("   "))), Err("Write a comment first"));
+        assert_eq!(reply(with("content", json!("x".repeat(4001)))), Err("Comments can have at most 4000 characters"));
+        assert_eq!(reply(with("parentCommentId", json!(0))), Err("Unknown comment"));
+        assert_eq!(reply(with("threadId", json!(0))), Err("Unknown thread"));
+        assert_eq!(reply(with("id", json!(-1))), Err("Unknown pull request"));
+        assert_eq!(reply(with("repositoryId", json!("<x>"))), Err("Unknown repository"));
+        let comment = |args: Value| parse_tool_call(&json!({ "name": "add_work_item_comment", "arguments": args }));
+        assert_eq!(comment(json!({ "project": "Web", "id": 9, "text": "" })), Err("Comments need 1 to 4000 characters"));
+        assert_eq!(comment(json!({ "project": "Web", "id": 0, "text": "x" })), Err("Unknown work item"));
+        assert_eq!(comment(json!({ "project": "Web", "id": 9 })), Err("Expected { project, id, text }"));
+    }
+
+    #[test]
+    fn write_errors_say_nothing_was_posted() {
+        use crate::error::AppError;
+        assert!(tool_error(&AppError::PullRequestWriteDenied).contains("nothing was posted"));
+        assert!(tool_error(&AppError::WriteRejected).contains("nothing was posted"));
     }
 
     #[test]
