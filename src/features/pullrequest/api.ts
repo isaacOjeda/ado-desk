@@ -115,6 +115,12 @@ export interface LineSelection {
   endOffset: number;
 }
 
+/** Comment text limit, as Rust counts it (code points, after trimming). */
+export const MAX_COMMENT_CHARS = 4000;
+
+/** `fixed` resolves a thread, `active` reactivates it. */
+export type ThreadStatusChange = "fixed" | "active";
+
 /** Rendered Markdown of one file version; `html` is sanitized in Rust. */
 export interface FilePreview {
   html: string;
@@ -152,6 +158,11 @@ export const pullRequestApi = {
   /** Starts a thread on the selected lines; `content` is Markdown, 1-4000 characters. */
   lineComment: (pr: PullRequestRef, selection: LineSelection, content: string) =>
     call<void>("add_pull_request_line_comment", { ...prArgs(pr), selection, content }),
+  /** Replies in `threadId` under comment `parentCommentId`; `content` is Markdown, 1-4000 characters. */
+  reply: (pr: PullRequestRef, threadId: number, parentCommentId: number, content: string) =>
+    call<void>("reply_to_pull_request_thread", { ...prArgs(pr), threadId, parentCommentId, content }),
+  threadStatus: (pr: PullRequestRef, threadId: number, status: ThreadStatusChange) =>
+    call<void>("set_pull_request_thread_status", { ...prArgs(pr), threadId, status }),
   filePreview: (pr: PullRequestRef, objectId: string) =>
     call<FilePreview>("get_pull_request_file_preview", { project: pr.project, repositoryId: pr.repositoryId, objectId }),
 };

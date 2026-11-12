@@ -112,6 +112,8 @@ pub fn run() {
             pull_requests::get_pull_request_file_preview,
             pull_request_actions::vote_pull_request,
             pull_request_actions::add_pull_request_line_comment,
+            pull_request_actions::reply_to_pull_request_thread,
+            pull_request_actions::set_pull_request_thread_status,
             checks::get_pull_request_checks,
             checks::pull_request_check_summaries,
             queries::query_work_items,

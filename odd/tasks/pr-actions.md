@@ -9,6 +9,8 @@ Branch: feat/improvements · Delivery: ask-on-risk · Test runner: `cargo test` 
 - S4 (derived, mirrors work-item-actions S2-S5) Writes run in Rust through `AzdoClient::write`; failures never sign out and never echo server text or the values sent; comments are sent as typed (Markdown, like the web), trimmed, 1-4000 characters; the PR reloads from the server after every write (no optimistic writes); a token without Code (Read & Write) keeps the app working read-only, with a hint instead of errors.
 - S5 (derived, pr-checks S1) New optional scope Code (Read & Write): update the `Forbidden` message in `error.rs`, the README, the login hint and CLAUDE.md.
 - S6 (derived, detail-views S9) The preview Markdown is sanitized in Rust; the PAT never reaches the webview. (Assumption) Repository-relative images in a preview are not loaded.
+- S8 Reply to a thread (roadmap phase 6: "PRs: vote (approve, approve with suggestions, wait, reject), reply to a thread, resolve a thread"). A comment thread (general or file) of an open pull request takes a reply, sent as typed (Markdown), trimmed, 1-4000 characters, under the thread's first comment. Shown in the Overview discussion and the inline threads of the Files tab.
+- S9 Resolve a thread (same roadmap line). An active or pending thread of an open pull request can be resolved (status `fixed`, shown as "Resolved"); a resolved, won't fix, closed or by design thread can be reactivated (`active`). (Assumption) No confirmation: the change is undone with one click, unlike votes and state changes.
 - S7 Amends detail-views S8 ("Read-only") for pull requests.
 
 ## Tasks
@@ -16,9 +18,13 @@ Branch: feat/improvements · Delivery: ask-on-risk · Test runner: `cargo test` 
 - T2 [S3, S4, S5, S7] Votes: Code write-access probe, `vote_pull_request`, vote control in Overview. Route: inline. Status: done (no probe: Azure DevOps has no validate-only PR write, so a refused vote switches that detail to read-only; RED 4/4 then GREEN; cargo test 256 + 5 ok, clippy clean, tsc + build ok; not exercised against Azure DevOps).
 - T3 [S1, S4] Line comments: selection in the diff, `add_pull_request_line_comment`, comment box, reload threads. Route: inline. Status: done (RED 3/3 then GREEN; cargo test 259 + 5 ok, clippy clean, tsc + build ok; not exercised against Azure DevOps).
 
+- T4 [S4, S8, S9] Thread reply and resolve: `reply_to_pull_request_thread`, `set_pull_request_thread_status`, reply box and Resolve/Reactivate on thread cards. Route: inline (one unit, shares Threads.tsx/Diff.tsx with the existing actions). Branch feat/pr-thread-actions. Status: done (RED: 4 tests failed to compile, then GREEN; cargo test 263 + 5 ok, clippy clean, tsc + build ok; browser preview with mocked IPC: resolve, reactivate, rejected reply keeps its text, reply under comment 1, denied reply switches to read-only; not exercised against Azure DevOps).
+
 ## Log
 - L1 (2026-11-11) User request: "crea una rama y pushea estos cambios pero quiero más cambios así que el nombre que sea features generico / quiero poder comentar en PRs en lineas que seleccione / si los archivos son .md quiero poder ver un preview / no sé si se pueden emitir votos o no, pero también quisiera eso en los PRs"
 - L2 Branch feat/improvements created from main a15715b; Inbox filters committed as 8d313f3 and pushed.
 - L3 Route evidence: units share the PR detail files (Files.tsx, Diff.tsx, pull_requests.rs, client.rs), so no parallel writers; inline, one commit per task.
 - L4 (2026-11-11) Independent verifier (item 2): S1-S6 PASS, S7 PARTIAL (missing note in detail-views S8, fixed). No blockers. Advisories kept: line comments reload threads only; preview does not validate project/repositoryId (same as the baseline diff command); endOffset counts code points, not UTF-16 units; resetting a vote adds you as an optional reviewer.
 - L5 (2026-11-12) Native review of 8d313f3..678e18c (escalated item 2; lenses risk, reliability): consent granted by the user, approved, acknowledged (authority burned).
+- L6 (2026-11-12) User: "sí, main fue actualizado" (to: update the roadmap and start phase 6 delivery 2). PR #9 already delivered votes and line comments; the roadmap's "reply to a thread, resolve a thread" are the remaining PR actions, tracked as S8-S9 / T4 on branch feat/pr-thread-actions.
+- L7 (2026-11-12) T4 note: a denied reply drops its typed text because the detail switches to read-only, the same as the existing line comment box (pr-actions T3); the read-only hint is unchanged.

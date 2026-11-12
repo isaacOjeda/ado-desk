@@ -5,12 +5,13 @@ import { Badge, DetailHeader, OpenInBrowser } from "../../components/ui";
 import type { PullRequest } from "../../lib/api";
 import { timeAgo } from "../../lib/format";
 import { useResource } from "../../lib/useResource";
-import { pullRequestApi, type LineSelection, type PullRequestThread } from "./api";
+import { pullRequestApi, type LineSelection, type PullRequestThread, type ThreadStatusChange } from "./api";
 import { checksApi } from "./checks";
 import { FilesTab } from "./Files";
 import type { LineCommenting } from "./Diff";
 import { statusBadge } from "./format";
 import { Overview, type PullRequestWrites } from "./Overview";
+import type { ThreadActions } from "./Threads";
 import "./pullrequest.css";
 
 export interface PullRequestDetailViewProps {
@@ -51,11 +52,23 @@ export function PullRequestDetailView({ pullRequest, onBack }: PullRequestDetail
     [readOnly, project, repositoryId, id, reloadDetail, reloadThreads],
   );
 
-  const lineCommenting: LineCommenting = useMemo(
-    () => ({ onComment: writes.onLineComment, onChanged: reloadThreads, onDenied: writes.onDenied }),
-    [writes, reloadThreads],
+  // Replies and status changes only touch the threads.
+  const threadActions: ThreadActions = useMemo(
+    () => ({
+      onReply: (thread: PullRequestThread, parentCommentId: number, content: string) =>
+        pullRequestApi.reply({ project, repositoryId, id }, thread.id, parentCommentId, content),
+      onStatus: (thread: PullRequestThread, status: ThreadStatusChange) =>
+        pullRequestApi.threadStatus({ project, repositoryId, id }, thread.id, status),
+      onChanged: reloadThreads,
+      onDenied: () => setReadOnly(true),
+    }),
+    [project, repositoryId, id, reloadThreads],
   );
-  // Only open pull requests take new comments; wait for the detail to know.
+  const lineCommenting: LineCommenting = useMemo(
+    () => ({ onComment: writes.onLineComment, threads: threadActions, onChanged: reloadThreads, onDenied: writes.onDenied }),
+    [writes, threadActions, reloadThreads],
+  );
+  // Only open pull requests take new comments, replies or status changes; wait for the detail to know.
   const detailStatus = detail.data?.status;
   const canComment = !readOnly && (detailStatus === "active" || detailStatus === "draft");
 
@@ -99,7 +112,7 @@ export function PullRequestDetailView({ pullRequest, onBack }: PullRequestDetail
 
       <div className={`detail-body${tab === "files" ? " pr-files-body" : ""}`}>
         {tab === "overview" ? (
-          <Overview detail={detail} threads={threads} checks={checks} writes={writes} />
+          <Overview detail={detail} threads={threads} checks={checks} writes={writes} threadActions={canComment ? threadActions : undefined} />
         ) : (
           <FilesTab
             pr={pullRequest}

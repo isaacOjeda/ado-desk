@@ -1,4 +1,4 @@
-//! Pull request write actions: vote and comment on diff lines.
+//! Pull request write actions: vote, comment on diff lines, reply to and resolve threads.
 //!
 //! Every write goes through `AzdoClient::write`, so a token without Code (Read & Write) never
 //! signs the user out and server text is never echoed. Values are validated before any URL or
@@ -22,6 +22,8 @@ pub const MAX_COMMENT_CHARS: usize = 4000;
 const MAX_PATH_CHARS: usize = 1024;
 const MAX_LINE: i64 = 1_000_000;
 const MAX_OFFSET: i64 = 100_000;
+/// Comment ids are 16-bit in the Azure DevOps API.
+const MAX_COMMENT_ID: i64 = i16::MAX as i64;
 
 /// Which version of the file the selected lines belong to: the changed one (`right`, added and
 /// unchanged lines) or the original one (`left`, deleted lines).
@@ -56,9 +58,8 @@ pub fn vote_body(vote: i64) -> AppResult<Value> {
     }
 }
 
-/// New active thread anchored to `selection`, with `content` as its first comment (Markdown,
-/// as typed, like the web).
-pub fn line_comment_body(selection: &LineSelection, content: &str) -> AppResult<Value> {
+/// Comment text as sent: Markdown as typed (like the web), trimmed, 1-4000 characters.
+fn comment_content(content: &str) -> AppResult<&str> {
     let content = content.trim();
     if content.is_empty() {
         return Err(AppError::InvalidChange("Write a comment first"));
@@ -66,6 +67,40 @@ pub fn line_comment_body(selection: &LineSelection, content: &str) -> AppResult<
     if content.chars().count() > MAX_COMMENT_CHARS {
         return Err(AppError::InvalidChange("Comments can have at most 4000 characters"));
     }
+    Ok(content)
+}
+
+/// A reply in an existing thread, answering comment `parent_comment_id` (the thread's first one).
+pub fn reply_body(parent_comment_id: i64, content: &str) -> AppResult<Value> {
+    let content = comment_content(content)?;
+    if !(1..=MAX_COMMENT_ID).contains(&parent_comment_id) {
+        return Err(AppError::InvalidChange("Unknown comment"));
+    }
+    Ok(json!({ "parentCommentId": parent_comment_id, "content": content, "commentType": 1 }))
+}
+
+/// Resolving (`fixed`) or reactivating (`active`) a thread; no other status is sent.
+pub fn thread_status_body(status: &str) -> AppResult<Value> {
+    let code = match status {
+        "active" => 1,
+        "fixed" => 2,
+        _ => return Err(AppError::InvalidChange("Unknown thread status")),
+    };
+    Ok(json!({ "status": code }))
+}
+
+fn valid_thread_id(thread_id: i64) -> AppResult<i64> {
+    if (1..=i64::from(i32::MAX)).contains(&thread_id) {
+        Ok(thread_id)
+    } else {
+        Err(AppError::InvalidChange("Unknown thread"))
+    }
+}
+
+/// New active thread anchored to `selection`, with `content` as its first comment (Markdown,
+/// as typed, like the web).
+pub fn line_comment_body(selection: &LineSelection, content: &str) -> AppResult<Value> {
+    let content = comment_content(content)?;
     let LineSelection { file_path, side, start_line, end_line, end_offset } = selection;
     let path_ok = file_path.starts_with('/')
         && file_path.chars().count() <= MAX_PATH_CHARS
@@ -184,6 +219,47 @@ pub async fn add_pull_request_line_comment(
     send_write(&client, Method::POST, url, &body).await
 }
 
+/// Replies in an existing thread, under its first comment.
+#[tauri::command]
+pub async fn reply_to_pull_request_thread(
+    state: State<'_, AppState>,
+    project: String,
+    repository_id: String,
+    id: i64,
+    thread_id: i64,
+    parent_comment_id: i64,
+    content: String,
+) -> AppResult<()> {
+    let body = reply_body(parent_comment_id, &content)?;
+    let project = valid_project(&project)?;
+    let repository_id = valid_repository_id(&repository_id)?;
+    let id = valid_pull_request_id(id)?;
+    let thread_id = valid_thread_id(thread_id)?.to_string();
+    let client = current_client(&state)?;
+    let url = pr_url(&client, &project, &repository_id, id, &["threads", &thread_id, "comments"]);
+    send_write(&client, Method::POST, url, &body).await
+}
+
+/// Resolves (`fixed`) or reactivates (`active`) a thread.
+#[tauri::command]
+pub async fn set_pull_request_thread_status(
+    state: State<'_, AppState>,
+    project: String,
+    repository_id: String,
+    id: i64,
+    thread_id: i64,
+    status: String,
+) -> AppResult<()> {
+    let body = thread_status_body(&status)?;
+    let project = valid_project(&project)?;
+    let repository_id = valid_repository_id(&repository_id)?;
+    let id = valid_pull_request_id(id)?;
+    let thread_id = valid_thread_id(thread_id)?.to_string();
+    let client = current_client(&state)?;
+    let url = pr_url(&client, &project, &repository_id, id, &["threads", &thread_id]);
+    send_write(&client, Method::PATCH, url, &body).await
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -286,6 +362,51 @@ mod tests {
         assert!(!err.to_string().contains("work items"), "{err}");
         assert!(matches!(pull_request_write_error(AppError::WriteRejected), AppError::WriteRejected));
         assert!(matches!(pull_request_write_error(AppError::NotFound), AppError::NotFound));
+    }
+
+    #[test]
+    fn reply_body_answers_the_given_comment_with_the_trimmed_text() {
+        assert_eq!(
+            reply_body(1, "  Done, **thanks**  ").unwrap(),
+            json!({ "parentCommentId": 1, "content": "Done, **thanks**", "commentType": 1 })
+        );
+        assert_eq!(reply_body(MAX_COMMENT_ID, "x").unwrap()["parentCommentId"], json!(MAX_COMMENT_ID));
+    }
+
+    #[test]
+    fn reply_body_rejects_bad_text_and_parents_without_echoing_them() {
+        let too_long = "x".repeat(MAX_COMMENT_CHARS + 1);
+        for content in ["", " \n\t", too_long.as_str()] {
+            let err = reply_body(1, content).unwrap_err();
+            assert!(matches!(err, AppError::InvalidChange(_)));
+            assert!(content.trim().is_empty() || !err.to_string().contains(content));
+        }
+        assert!(reply_body(1, &"é".repeat(MAX_COMMENT_CHARS)).is_ok());
+        for parent in [0, -1, MAX_COMMENT_ID + 1, i64::MAX] {
+            let err = reply_body(parent, "x").unwrap_err();
+            assert!(matches!(err, AppError::InvalidChange(_)), "{parent}");
+            assert!(!err.to_string().contains(&parent.to_string()), "{err}");
+        }
+    }
+
+    #[test]
+    fn thread_status_body_only_resolves_or_reactivates() {
+        assert_eq!(thread_status_body("fixed").unwrap(), json!({ "status": 2 }));
+        assert_eq!(thread_status_body("active").unwrap(), json!({ "status": 1 }));
+        for status in ["", "Fixed", "closed", "wontFix", "byDesign", "pending", "unknown", "2", "fixed "] {
+            let err = thread_status_body(status).unwrap_err();
+            assert!(matches!(err, AppError::InvalidChange(_)), "{status:?}");
+            assert!(status.is_empty() || !err.to_string().contains(status), "{err}");
+        }
+    }
+
+    #[test]
+    fn thread_ids_are_validated() {
+        assert_eq!(valid_thread_id(7).unwrap(), 7);
+        assert_eq!(valid_thread_id(i64::from(i32::MAX)).unwrap(), i64::from(i32::MAX));
+        for bad in [0, -1, i64::from(i32::MAX) + 1] {
+            assert!(matches!(valid_thread_id(bad), Err(AppError::InvalidChange(_))), "{bad}");
+        }
     }
 
     #[test]
