@@ -390,6 +390,25 @@ mod tests {
     }
 
     #[test]
+    fn reply_limits_count_code_points_after_trimming() {
+        let padded = format!("  \n{}\t ", "x".repeat(MAX_COMMENT_CHARS));
+        assert_eq!(reply_body(3, &padded).unwrap()["content"].as_str().unwrap().chars().count(), MAX_COMMENT_CHARS);
+        assert!(reply_body(3, &"😀".repeat(MAX_COMMENT_CHARS)).is_ok());
+        assert!(reply_body(3, &"😀".repeat(MAX_COMMENT_CHARS + 1)).is_err());
+        assert_eq!(reply_body(0, " ").unwrap_err().to_string(), "Write a comment first");
+    }
+
+    #[test]
+    fn reply_and_status_errors_are_fixed_text() {
+        let secret = "SECRET-PAT-abcdef";
+        let err = reply_body(40000, secret).unwrap_err().to_string();
+        assert!(!err.contains(secret) && !err.contains("40000"), "{err}");
+        assert!(!thread_status_body(secret).unwrap_err().to_string().contains(secret));
+        assert!(!valid_thread_id(-7).unwrap_err().to_string().contains('7'));
+        assert_eq!(thread_status_body("fixed").unwrap().as_object().unwrap().len(), 1);
+    }
+
+    #[test]
     fn thread_status_body_only_resolves_or_reactivates() {
         assert_eq!(thread_status_body("fixed").unwrap(), json!({ "status": 2 }));
         assert_eq!(thread_status_body("active").unwrap(), json!({ "status": 1 }));
