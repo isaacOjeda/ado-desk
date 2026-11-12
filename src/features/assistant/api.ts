@@ -5,7 +5,15 @@ import { call } from "../../lib/api";
 /** Mirrors `assistant::terminal::TerminalEvent`. */
 export type TerminalEvent = { kind: "output"; data: string } | { kind: "exit"; code: number | null };
 
+/** Mirrors `assistant::context::ViewContext`: what the main window shows, for `current_view`. */
+export type ViewContext =
+  | { kind: "workItem"; id: number; project: string; title: string }
+  | { kind: "pullRequest"; id: number; project: string; repositoryId: string; repository: string; title: string }
+  | { kind: "list"; list: "inbox" | "workItems" | "pullRequests" };
+
 export const assistantApi = {
+  /** Records what the main window shows; Rust tags it with the active organization. */
+  setView: (view: ViewContext | null) => call<void>("assistant_set_view", { view }),
   /** Starts `claude` in a new terminal (ending any previous one); resolves with the session id. */
   start: (cols: number, rows: number, onEvent: (event: TerminalEvent) => void) => {
     const events = new Channel<TerminalEvent>();

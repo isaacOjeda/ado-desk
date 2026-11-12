@@ -149,7 +149,7 @@ fn valid_pull_request_id(id: i64) -> AppResult<i64> {
     if id > 0 { Ok(id) } else { Err(AppError::InvalidChange("Unknown pull request")) }
 }
 
-fn valid_project(project: &str) -> AppResult<String> {
+pub(crate) fn valid_project(project: &str) -> AppResult<String> {
     queries::validate_project(project).map_err(|_| AppError::InvalidChange("Unknown project"))
 }
 

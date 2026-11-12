@@ -146,6 +146,21 @@ credentials. Install Claude Code from https://code.claude.com/docs first.
 - Hiding the panel keeps the session; *Restart* ends it and starts a new one. Switching
   organization or quitting ADO Desk ends it.
 
+**What Claude can see.** With the first session, ADO Desk starts a local MCP server (`ado-desk`)
+that the session loads through `--mcp-config`. Its read tools work on the active organization and
+run without asking:
+
+- `current_view`: the work item, pull request or list you have open;
+- `get_work_item`: fields, description and the 20 most recent comments;
+- `get_pull_request`: details, reviewers and votes, comment threads and changed files.
+
+So you can ask "summarize this pull request" or "what is left on this bug?" about whatever is on
+screen. The server listens on 127.0.0.1 only, on a random port, and requires a token created at
+each app launch, which reaches Claude Code only through the `ADO_DESK_MCP_TOKEN` environment
+variable of its terminal; requests from a browser (with an `Origin` header) or for another host
+name are refused. Your Azure DevOps token stays in ADO Desk. Text from Azure DevOps is written by
+other people, and Claude Code is told to treat it as data, not instructions.
+
 ## Notifications
 
 While ADO Desk runs (also with the window closed), it checks every configured organization every
@@ -200,7 +215,7 @@ src-tauri/src/
   background.rs           Menu bar icon, hide-on-close, Dock reopen
   notifications/          Background checks: rules (what is new), fetch, Inbox store, loop
   themes/                 Open VSX search/import, vsix reader, VS Code color mapping, store
-  assistant/              Assistant panel: `claude` lookup, terminal (PTY) sessions
+  assistant/              Assistant panel: `claude` lookup, terminal (PTY) sessions, local MCP server
 ```
 
 - Work items: WIQL `[System.AssignedTo] = @Me` excluding Closed/Done/Removed, up to 200.

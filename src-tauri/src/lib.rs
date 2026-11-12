@@ -142,6 +142,7 @@ pub fn run() {
             assistant::terminal::assistant_write,
             assistant::terminal::assistant_resize,
             assistant::terminal::assistant_stop,
+            assistant::terminal::assistant_set_view,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

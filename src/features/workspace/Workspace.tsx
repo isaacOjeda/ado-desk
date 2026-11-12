@@ -30,6 +30,7 @@ import { activeViewId, viewsFor } from "../views/model";
 import { useSavedViews } from "../views/useSavedViews";
 import { useCheckSummaries } from "../pullrequest/checks";
 import { AssistantPanel } from "../assistant/AssistantPanel";
+import { assistantApi, type ViewContext } from "../assistant/api";
 
 interface Props {
   session: Session;
@@ -96,6 +97,23 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
     }
     onOpenHandled();
   }, [openRequest, organization, setSelection, onOpenHandled]);
+  // The assistant's `current_view` tool reads what is on screen.
+  useEffect(() => {
+    const context: ViewContext =
+      selection?.kind === "workItem"
+        ? { kind: "workItem", id: selection.workItem.id, project: selection.workItem.project, title: selection.workItem.title }
+        : selection?.kind === "pullRequest"
+          ? {
+              kind: "pullRequest",
+              id: selection.pullRequest.id,
+              project: selection.pullRequest.project,
+              repositoryId: selection.pullRequest.repositoryId,
+              repository: selection.pullRequest.repository,
+              title: selection.pullRequest.title,
+            }
+          : { kind: "list", list: view };
+    assistantApi.setView(context).catch(() => {});
+  }, [selection, view, organization]);
   const [workItemFilter, setWorkItemFilter] = usePersistentFilter(organization, "workItems", parseWorkItemFilter);
   const [pullRequestFilter, setPullRequestFilter] = usePersistentFilter(
     organization,

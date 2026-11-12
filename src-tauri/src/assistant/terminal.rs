@@ -13,7 +13,9 @@ use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
 
+use super::context::{self, ViewContext};
 use super::launch::{self, CLAUDE_NAMES};
+use super::server::ServerInfo;
 use crate::error::{AppError, AppResult};
 use crate::settings::SettingsState;
 
@@ -56,6 +58,10 @@ pub struct AssistantState {
     next_id: AtomicU32,
     /// The login shell's PATH, kept once found.
     login_path: Mutex<Option<String>>,
+    /// The local MCP server, started with the first session.
+    server: Mutex<Option<ServerInfo>>,
+    /// What the main window shows, with the organization it belongs to.
+    view: Mutex<Option<(String, ViewContext)>>,
 }
 
 impl AssistantState {
@@ -73,6 +79,20 @@ impl AssistantState {
         if let Some(session) = self.current.lock().unwrap_or_else(|e| e.into_inner()).take() {
             session.kill();
         }
+    }
+
+    pub fn view(&self) -> Option<(String, ViewContext)> {
+        self.view.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+
+    fn server(&self, app: &AppHandle) -> AppResult<ServerInfo> {
+        let mut server = self.server.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(info) = server.as_ref() {
+            return Ok(info.clone());
+        }
+        let info = super::server::spawn(super::server::app_runner(app.clone()))?;
+        *server = Some(info.clone());
+        Ok(info)
     }
 
     fn login_path(&self) -> Option<String> {
@@ -176,6 +196,7 @@ fn start(app: &AppHandle, cols: u16, rows: u16, events: Channel<TerminalEvent>) 
     let login_path = state.login_path();
     let claude = locate_claude(settings.claude_path.as_deref(), login_path.as_deref())?;
     let folder = working_folder(app, settings.working_folder.as_deref())?;
+    let server = state.server(app)?;
     let failed = |_| AppError::Assistant("The assistant terminal could not start");
 
     let (cols, rows) = launch::pty_size(cols, rows);
@@ -183,7 +204,9 @@ fn start(app: &AppHandle, cols: u16, rows: u16, events: Channel<TerminalEvent>) 
         .openpty(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 })
         .map_err(failed)?;
     let mut command = CommandBuilder::new(&claude);
+    command.args(launch::claude_args(server.port));
     command.cwd(&folder);
+    command.env(launch::TOKEN_ENV, &server.token);
     if let Some(path) = &login_path {
         command.env("PATH", path);
     }
@@ -307,6 +330,34 @@ pub fn assistant_stop(state: State<'_, AssistantState>, id: u32) -> AppResult<()
         session.kill();
     }
     Ok(())
+}
+
+/// Records what the main window shows, for the `current_view` tool. `None` clears it.
+#[tauri::command]
+pub fn assistant_set_view(
+    state: State<'_, AssistantState>,
+    app_state: State<'_, crate::AppState>,
+    view: Option<ViewContext>,
+) -> AppResult<()> {
+    let organization = crate::commands::current_client(&app_state).ok().map(|client| client.org().to_string());
+    let recorded = match (view, organization) {
+        (Some(view), Some(organization)) => Some((organization, context::validate(view)?)),
+        _ => None,
+    };
+    *state.view.lock().unwrap_or_else(|e| e.into_inner()) = recorded;
+    Ok(())
+}
+
+#[cfg(test)]
+pub(crate) mod tests_support {
+    /// The real lookup, for opt-in tests that run the installed `claude`.
+    pub fn login_path() -> Option<String> {
+        super::read_login_path()
+    }
+
+    pub fn locate(login_path: Option<&str>) -> Option<std::path::PathBuf> {
+        super::locate_claude(None, login_path).ok()
+    }
 }
 
 #[cfg(all(test, unix))]
