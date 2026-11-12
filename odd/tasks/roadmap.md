@@ -14,7 +14,7 @@ Order is by dependency first, then value. Update the Status cell; never delete a
 | 3 | Notifications for what needs you | 2 | none | 4 (polling, async ordering) | Done (main 3e32270, 2026-11-07) |
 | 4 | Saved views | — | none | 3 (persisted settings shape) | Done (main 8da5c63, 2026-11-10) |
 | 5 | Build and policy status on PRs | — | Build (Read), optional | 2 (PAT scope, `Forbidden` message) | Done (main a04220f, 2026-11-10) |
-| 6 | Write actions | 5 | Work Items + Code (Read & Write) | 1, 2 (irreversible remote changes) | Planned |
+| 6 | Write actions | 5 | Work Items + Code (Read & Write) | 1, 2 (irreversible remote changes) | In progress: work item actions done (main a15715b, 2026-11-12); PR votes and line comments done (main 408db39, 2026-11-12); thread reply and resolve in progress (`pr-actions` T4) |
 
 ## Phases
 

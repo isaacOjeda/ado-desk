@@ -8,7 +8,7 @@ import type { PullRequestChecks } from "./checks";
 import { ChecksSection } from "./ChecksSection";
 import { Async } from "./Async";
 import { mergeStatus, reviewerVote } from "./format";
-import { Discussion } from "./Threads";
+import { Discussion, type ThreadActions } from "./Threads";
 import { PullRequestReadOnlyHint, VoteControl } from "./Actions";
 
 /** Write hooks of the detail; absent pieces render read-only. */
@@ -121,11 +121,14 @@ export function Overview({
   threads,
   checks,
   writes,
+  threadActions,
 }: {
   detail: Resource<PullRequestDetail>;
   threads: Resource<PullRequestThread[]>;
   checks: Resource<PullRequestChecks>;
   writes: PullRequestWrites;
+  /** Reply and resolve; absent when read-only or the pull request is closed. */
+  threadActions?: ThreadActions;
 }) {
   return (
     <Async resource={detail}>
@@ -142,7 +145,7 @@ export function Overview({
             </section>
             <section className="section">
               <h3 className="section-title">Discussion</h3>
-              <Async resource={threads}>{(list) => <Discussion threads={list} />}</Async>
+              <Async resource={threads}>{(list) => <Discussion threads={list} actions={threadActions} />}</Async>
             </section>
           </div>
           <Aside detail={pr} checks={checks} writes={writes} />

@@ -67,7 +67,7 @@ with these scopes:
 - **Project and Team**: Read (used to discover projects for the pull request list)
 - **Build**: Read (optional: build status on pull requests; without it, builds show as unavailable and everything else still loads)
 - **Work Items**: Read & Write (optional: work item actions; without it, the work item detail stays read-only with a hint)
-- **Code**: Read & Write (optional: pull request actions; without it, a refused vote or comment switches the pull request detail to read-only with a hint)
+- **Code**: Read & Write (optional: pull request actions; without it, a refused vote, comment, reply or thread change switches the pull request detail to read-only with a hint)
 
 Enter your organization (`contoso` or `https://dev.azure.com/contoso`) and the token.
 The token is validated against Azure DevOps, then stored in the OS credential store
@@ -124,7 +124,9 @@ suggestions, wait for author, reject, or reset your vote) after a confirmation, 
 lets you comment on lines: click a line number to select it (Shift+click another line in the same
 block to select a range), write the comment (Markdown, up to 4000 characters) and save it as a new
 thread on those lines. Line numbers on the left side comment on the original file, on the right
-side on the changed one. Writes run in Rust with validated values only, and the pull request and
+side on the changed one. Comment threads, in the Overview and in the diff, take a reply (Markdown,
+up to 4000 characters) and can be resolved, or reactivated once resolved or closed. Votes, new
+comments, replies and thread changes are only offered on open pull requests. Writes run in Rust with validated values only, and the pull request and
 its threads are read again afterwards. A refused write never signs you out; it switches that pull
 request to read-only with a hint. `.md` files in the Files tab can also switch between their diff
 and a rendered preview (links and images relative to the repository are not shown).

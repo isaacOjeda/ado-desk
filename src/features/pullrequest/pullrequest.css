@@ -119,6 +119,21 @@
   padding-left: 40px;
 }
 
+/* Reply and Resolve/Reactivate under a thread. */
+.pr-thread-footer {
+  padding: 8px 0 12px;
+  border-top: 1px solid var(--border);
+}
+
+.pr-thread-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.diff-comment-box.pr-thread-reply {
+  margin: 0;
+}
+
 .pr-activity-group {
   display: flex;
   flex-direction: column;

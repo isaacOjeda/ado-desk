@@ -2,10 +2,10 @@
 // are plain text and are rendered as React text nodes only (never as HTML).
 import { Fragment, useMemo, useState } from "react";
 import { Badge, OpenInBrowser } from "../../components/ui";
-import type { DiffHunk, DiffLine, DiffSide, FileChange, FileDiff, LineSelection, PullRequestThread } from "./api";
+import { MAX_COMMENT_CHARS, type DiffHunk, type DiffLine, type DiffSide, type FileChange, type FileDiff, type LineSelection, type PullRequestThread } from "./api";
 import { usePullRequestWrite } from "./Actions";
 import { changeTypeBadge } from "./format";
-import { ThreadCard } from "./Threads";
+import { ThreadCard, type ThreadActions } from "./Threads";
 
 interface Anchors {
   right: Map<number, PullRequestThread[]>;
@@ -47,19 +47,20 @@ function threadsAfter(line: DiffLine, anchors: Anchors): PullRequestThread[] {
 
 const MARKERS = { add: "+", delete: "-", context: " " } as const;
 
-function InlineThreads({ threads }: { threads: PullRequestThread[] }) {
+function InlineThreads({ threads, actions }: { threads: PullRequestThread[]; actions?: ThreadActions }) {
   return (
     <div className="diff-threads">
       {threads.map((thread) => (
-        <ThreadCard key={thread.id} thread={thread} />
+        <ThreadCard key={thread.id} thread={thread} actions={actions} />
       ))}
     </div>
   );
 }
 
-/** Commenting on selected lines; absent when the detail is read-only or the PR is closed. */
+/** Diff writes (comments on selected lines, thread replies and resolve); absent when the detail is read-only or the PR is closed. */
 export interface LineCommenting {
   onComment: (selection: LineSelection, content: string) => Promise<void>;
+  threads: ThreadActions;
   onChanged: () => void;
   onDenied: () => void;
 }
@@ -85,8 +86,6 @@ function pickedIndexes(hunk: DiffHunk, picked: PickedLines): number[] {
   for (let i = from; i <= to; i++) if (sideLine(hunk.lines[i], picked.side) !== null) indexes.push(i);
   return indexes;
 }
-
-const MAX_COMMENT_CHARS = 4000;
 
 function toSelection(path: string, hunk: DiffHunk, picked: PickedLines): LineSelection | null {
   const indexes = pickedIndexes(hunk, picked);
@@ -233,7 +232,7 @@ function Hunk({
                 {line.text}
               </span>
             </div>
-            {threads.length > 0 && <InlineThreads threads={threads} />}
+            {threads.length > 0 && <InlineThreads threads={threads} actions={commenting?.threads} />}
             {index === boxAfter && selection && commenting && (
               <LineCommentBox
                 key={`${selection.side}:${selection.startLine}`}
@@ -283,7 +282,7 @@ export function DiffView({
   };
   return (
     <>
-      {anchors.top.length > 0 && <InlineThreads threads={anchors.top} />}
+      {anchors.top.length > 0 && <InlineThreads threads={anchors.top} actions={commenting?.threads} />}
       {message ? (
         <div className="diff-message">
           <span>{message}</span>
