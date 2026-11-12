@@ -10,7 +10,7 @@ Branch: feat/detail-views · Delivery: ask-on-risk · Test runner: `cargo test` 
 - S5 Pull request comments (discussion threads, including file-anchored threads): "sus comentarios"
 - S6 Pull request code changes (changed files list and per-file diff): "y código?"
 - S7 Layout similar to the Azure DevOps web: "así como se ve similar en la web?"
-- S8 (assumption) Read-only: no posting, voting or editing. The user only asked to see and read.
+- S8 (assumption) Read-only: no posting, voting or editing. The user only asked to see and read. Amended by work-item-actions and pr-actions S7: pull requests now take votes and line comments.
 - S9 (derived constraint) Rich text from Azure DevOps (HTML and Markdown) is sanitized in Rust before reaching the webview; authenticated images load through a Rust proxy restricted to the signed-in organization on dev.azure.com; the PAT never reaches the webview.
 
 ## Tasks
