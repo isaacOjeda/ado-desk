@@ -1,0 +1,103 @@
+/* Assistant panel: a terminal docked under the list or detail view. */
+
+.content-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.assistant-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  min-height: 140px;
+  border-top: 1px solid var(--border);
+  background: var(--content-bg);
+}
+
+.assistant-panel[hidden] {
+  display: none;
+}
+
+.assistant-resize {
+  position: absolute;
+  top: -3px;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: ns-resize;
+  z-index: 1;
+}
+
+.assistant-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 8px 0 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.assistant-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.assistant-subtitle {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.assistant-spacer {
+  flex: 1;
+}
+
+.assistant-terminal {
+  flex: 1;
+  min-height: 0;
+  padding: 6px 0 0 10px;
+}
+
+.assistant-terminal[hidden] {
+  display: none;
+}
+
+.assistant-terminal .xterm {
+  height: 100%;
+}
+
+.assistant-message {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.assistant-message p {
+  margin: 0;
+  max-width: 520px;
+}
+
+.assistant-message-actions,
+.assistant-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.assistant-banner {
+  padding: 6px 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}

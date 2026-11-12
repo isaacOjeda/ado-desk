@@ -93,7 +93,9 @@ export type ApiErrorKind =
   | "invalidExtension"
   | "openVsx"
   | "themeImport"
-  | "invalidSearch";
+  | "invalidSearch"
+  | "assistantNotFound"
+  | "assistant";
 
 export class ApiError extends Error {
   constructor(

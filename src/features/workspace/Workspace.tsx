@@ -29,6 +29,7 @@ import { useInboxFilter } from "../inbox/filter";
 import { activeViewId, viewsFor } from "../views/model";
 import { useSavedViews } from "../views/useSavedViews";
 import { useCheckSummaries } from "../pullrequest/checks";
+import { AssistantPanel } from "../assistant/AssistantPanel";
 
 interface Props {
   session: Session;
@@ -69,6 +70,9 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
   const [view, setView] = useState<View>("workItems");
   const [query, setQuery] = useState("");
   const [selection, setSelectionState] = useState<Selection>(null);
+  // The panel mounts on first open and then stays mounted, so hiding it keeps the session.
+  const [assistant, setAssistant] = useState<"never" | "open" | "hidden">("never");
+  const toggleAssistant = useCallback(() => setAssistant((current) => (current === "open" ? "hidden" : "open")), []);
   const organization = session.organization;
 
   // Every opened item becomes a quick search "recent".
@@ -158,6 +162,13 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
   // Cmd/Ctrl+, opens Settings.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "j") {
+        e.preventDefault();
+        toggleAssistant();
+        return;
+      }
+      // Keys typed in the assistant's terminal belong to it (Esc interrupts Claude there).
+      if (e.target instanceof Element && e.target.closest(".assistant-panel")) return;
       if ((e.metaKey || e.ctrlKey) && e.key === ",") {
         e.preventDefault();
         openSettings();
@@ -180,7 +191,7 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [active, selection, setSelection, view]);
+  }, [active, selection, setSelection, view, toggleAssistant]);
 
   const visibleWorkItems = useMemo(
     () =>
@@ -217,6 +228,8 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
         onSignOut={onSignOut}
         onOpenSettings={openSettings}
         onSearch={requestQuickSearch}
+        assistantOpen={assistant === "open"}
+        onToggleAssistant={toggleAssistant}
         views={views}
         activeViewId={currentViewId}
         onApplyView={applyView}
@@ -224,6 +237,7 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
       />
 
       <main className="content">
+        <div className="content-main">
         {selection?.kind === "workItem" ? (
           <WorkItemDetailView
             key={selection.workItem.id}
@@ -307,6 +321,14 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
           )}
         </section>
           </>
+        )}
+        </div>
+        {assistant !== "never" && (
+          <AssistantPanel
+            open={assistant === "open"}
+            onClose={() => setAssistant("hidden")}
+            onOpenSettings={openSettings}
+          />
         )}
       </main>
     </div>

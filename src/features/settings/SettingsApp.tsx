@@ -6,15 +6,17 @@ import { AppearanceSection } from "./AppearanceSection";
 import { ProfileSection } from "./ProfileSection";
 import { ShortcutsSection } from "./ShortcutsSection";
 import { NotificationsSection } from "./NotificationsSection";
+import { AssistantSection } from "./AssistantSection";
 import "./settings.css";
 
-type Section = "profile" | "appearance" | "notifications" | "shortcuts";
+type Section = "profile" | "appearance" | "notifications" | "shortcuts" | "assistant";
 
 const SECTIONS: { id: Section; label: string; icon: string }[] = [
   { id: "profile", label: "Profile", icon: "◉" },
   { id: "appearance", label: "Appearance", icon: "◐" },
   { id: "notifications", label: "Notifications", icon: "◎" },
   { id: "shortcuts", label: "Shortcuts", icon: "⌨" },
+  { id: "assistant", label: "Assistant", icon: "✦" },
 ];
 
 function message(err: unknown): string {
@@ -179,6 +181,8 @@ export function SettingsApp() {
             <AppearanceSection settings={settings} onChange={changeSettings} />
           ) : section === "notifications" ? (
             <NotificationsSection settings={settings} onChange={changeSettings} />
+          ) : section === "assistant" ? (
+            <AssistantSection settings={settings} onChange={changeSettings} />
           ) : (
             <ShortcutsSection settings={settings} onChange={changeSettings} />
           )}

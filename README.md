@@ -131,6 +131,21 @@ its threads are read again afterwards. A refused write never signs you out; it s
 request to read-only with a hint. `.md` files in the Files tab can also switch between their diff
 and a rendered preview (links and images relative to the repository are not shown).
 
+## Assistant
+
+The **Assistant** panel (sidebar, or ⌘J / Ctrl+J) opens Claude Code in a terminal at the bottom of
+the main window. It runs the `claude` CLI you already installed, signed in with your own Claude
+account or API key through Claude Code's own sign-in; ADO Desk never reads or stores those
+credentials. Install Claude Code from https://code.claude.com/docs first.
+
+- ADO Desk finds `claude` on your login shell's PATH (an app opened from Finder does not inherit
+  it), then in `~/.local/bin`, `~/.claude/local`, `/opt/homebrew/bin` and `/usr/local/bin`. Set an
+  exact path in Settings > Assistant when it lives elsewhere.
+- Sessions start in an empty folder owned by ADO Desk (in its app data directory), or in the
+  folder set in Settings > Assistant. Claude Code can read and change files in that folder.
+- Hiding the panel keeps the session; *Restart* ends it and starts a new one. Quitting ADO Desk
+  ends it.
+
 ## Notifications
 
 While ADO Desk runs (also with the window closed), it checks every configured organization every
@@ -185,6 +200,7 @@ src-tauri/src/
   background.rs           Menu bar icon, hide-on-close, Dock reopen
   notifications/          Background checks: rules (what is new), fetch, Inbox store, loop
   themes/                 Open VSX search/import, vsix reader, VS Code color mapping, store
+  assistant/              Assistant panel: `claude` lookup, terminal (PTY) sessions
 ```
 
 - Work items: WIQL `[System.AssignedTo] = @Me` excluding Closed/Done/Removed, up to 200.
