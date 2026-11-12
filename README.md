@@ -67,6 +67,7 @@ with these scopes:
 - **Project and Team**: Read (used to discover projects for the pull request list)
 - **Build**: Read (optional: build status on pull requests; without it, builds show as unavailable and everything else still loads)
 - **Work Items**: Read & Write (optional: work item actions; without it, the work item detail stays read-only with a hint)
+- **Code**: Read & Write (optional: pull request actions; without it, a refused vote switches the pull request detail to read-only with a hint)
 
 Enter your organization (`contoso` or `https://dev.azure.com/contoso`) and the token.
 The token is validated against Azure DevOps, then stored in the OS credential store
@@ -115,6 +116,13 @@ only; state and assignee changes are refused if the item changed since it loaded
 or delete is refused unless the comment is still yours and unchanged, and the item and its
 comments are read again from Azure DevOps after each write. Without the scope the actions are hidden behind a hint;
 a refused write never signs you out.
+
+## Pull request actions
+
+With **Code: Read & Write**, the pull request Overview lets you vote (approve, approve with
+suggestions, wait for author, reject, or reset your vote) after a confirmation. The vote runs in
+Rust with a validated value, and the pull request and its threads are read again afterwards. A
+refused vote never signs you out; it switches that pull request to read-only with a hint.
 
 ## Notifications
 

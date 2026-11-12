@@ -1,6 +1,6 @@
-// Container for the read-only pull request detail: loads data and owns tab state.
+// Container for the pull request detail: loads data, owns tab state and the write hooks.
 // Layout mirrors the Azure DevOps web pull request page (Overview / Files).
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Badge, DetailHeader, OpenInBrowser } from "../../components/ui";
 import type { PullRequest } from "../../lib/api";
 import { timeAgo } from "../../lib/format";
@@ -9,7 +9,7 @@ import { pullRequestApi, type PullRequestThread } from "./api";
 import { checksApi } from "./checks";
 import { FilesTab } from "./Files";
 import { statusBadge } from "./format";
-import { Overview } from "./Overview";
+import { Overview, type PullRequestWrites } from "./Overview";
 import "./pullrequest.css";
 
 export interface PullRequestDetailViewProps {
@@ -30,6 +30,23 @@ export function PullRequestDetailView({ pullRequest, onBack }: PullRequestDetail
   const threads = useResource(useCallback(() => pullRequestApi.threads({ project, repositoryId, id }), [project, repositoryId, id]));
   const files = useResource(useCallback(() => pullRequestApi.files({ project, repositoryId, id }), [project, repositoryId, id]));
   const checks = useResource(useCallback(() => checksApi.detail({ project, repositoryId, id }), [project, repositoryId, id]));
+
+  // A refused write switches this detail to read-only; it is never remembered elsewhere.
+  const [readOnly, setReadOnly] = useState(false);
+  const reloadDetail = detail.reload;
+  const reloadThreads = threads.reload;
+  const writes: PullRequestWrites = useMemo(
+    () => ({
+      readOnly,
+      onVote: (vote: number) => pullRequestApi.vote({ project, repositoryId, id }, vote),
+      onChanged: () => {
+        reloadDetail();
+        reloadThreads();
+      },
+      onDenied: () => setReadOnly(true),
+    }),
+    [readOnly, project, repositoryId, id, reloadDetail, reloadThreads],
+  );
 
   const status = statusBadge(detail.data?.status ?? (pullRequest.isDraft ? "draft" : "active"));
   const fileCount = files.data?.files.length;
@@ -71,7 +88,7 @@ export function PullRequestDetailView({ pullRequest, onBack }: PullRequestDetail
 
       <div className={`detail-body${tab === "files" ? " pr-files-body" : ""}`}>
         {tab === "overview" ? (
-          <Overview detail={detail} threads={threads} checks={checks} />
+          <Overview detail={detail} threads={threads} checks={checks} writes={writes} />
         ) : (
           <FilesTab pr={pullRequest} files={files} threads={threads.data ?? NO_THREADS} />
         )}

@@ -28,6 +28,8 @@ export interface PullRequestDetail {
   repository: string;
   project: string;
   reviewers: Reviewer[];
+  /** The signed-in user's vote (0 when they have not voted). */
+  myVote: number;
   labels: string[];
   workItems: WorkItem[];
   url: string;
@@ -132,6 +134,8 @@ export const pullRequestApi = {
       objectId: file.objectId,
       originalObjectId: file.originalObjectId,
     }),
+  /** Sets the signed-in user's vote: 10, 5, 0 (reset), -5 or -10. */
+  vote: (pr: PullRequestRef, vote: number) => call<void>("vote_pull_request", { ...prArgs(pr), vote }),
   filePreview: (pr: PullRequestRef, objectId: string) =>
     call<FilePreview>("get_pull_request_file_preview", { project: pr.project, repositoryId: pr.repositoryId, objectId }),
 };

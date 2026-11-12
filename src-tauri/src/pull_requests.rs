@@ -71,6 +71,8 @@ pub struct PullRequestDetail {
     pub repository: String,
     pub project: String,
     pub reviewers: Vec<Reviewer>,
+    /// The signed-in user's vote (0 when they have not voted or are not a reviewer).
+    pub my_vote: i64,
     pub labels: Vec<String>,
     pub work_items: Vec<WorkItem>,
     pub url: String,
@@ -443,6 +445,7 @@ pub fn map_detail(organization: &str, raw: RawPullRequestDetail, work_items: Vec
         repository,
         project,
         reviewers,
+        my_vote: 0,
         labels: raw.labels.into_iter().filter(|l| l.active).map(|l| l.name).collect(),
         work_items,
         url: url.to_string(),
@@ -749,7 +752,9 @@ pub async fn get_pull_request(
         linked_work_items(&client, &project, &repository_id, id)
     );
     // Linked work items are secondary: show the pull request even if they fail.
-    Ok(map_detail(client.org(), raw?, work_items.unwrap_or_default()))
+    let mut detail = map_detail(client.org(), raw?, work_items.unwrap_or_default());
+    detail.my_vote = crate::pull_request_actions::my_vote(&detail.reviewers, &client.session().user_id);
+    Ok(detail)
 }
 
 #[tauri::command]

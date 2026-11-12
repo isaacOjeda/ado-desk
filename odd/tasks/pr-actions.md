@@ -13,7 +13,7 @@ Branch: feat/improvements · Delivery: ask-on-risk · Test runner: `cargo test` 
 
 ## Tasks
 - T1 [S2, S6] `.md` preview: Rust command returning sanitized HTML for one side of a changed file, Diff/Preview toggle. Route: inline. Status: done (RED 3/3 then GREEN; cargo test 252 + 5 ok, clippy clean, tsc + build ok; not exercised in the running app).
-- T2 [S3, S4, S5, S7] Votes: Code write-access probe, `vote_pull_request`, vote control in Overview. Route: inline. Status: pending.
+- T2 [S3, S4, S5, S7] Votes: Code write-access probe, `vote_pull_request`, vote control in Overview. Route: inline. Status: done (no probe: Azure DevOps has no validate-only PR write, so a refused vote switches that detail to read-only; RED 4/4 then GREEN; cargo test 256 + 5 ok, clippy clean, tsc + build ok; not exercised against Azure DevOps).
 - T3 [S1, S4] Line comments: selection in the diff, `add_pull_request_line_comment`, comment box, reload threads. Route: inline. Status: pending.
 
 ## Log

@@ -8,11 +8,13 @@ pub enum AppError {
     InvalidOrganization,
     #[error("The personal access token is invalid or expired")]
     Unauthorized,
-    #[error("The token lacks the required scopes (Work Items, Code, Project and Team: Read). Build (Read) is optional, for build status; Work Items (Read & Write) is optional, for work item actions")]
+    #[error("The token lacks the required scopes (Work Items, Code, Project and Team: Read). Build (Read) is optional, for build status; Work Items (Read & Write) is optional, for work item actions; Code (Read & Write) is optional, for pull request actions")]
     Forbidden,
     // Writes never answer `Unauthorized`: a token without a write scope must not sign out.
     #[error("The token cannot change work items. Add Work Items (Read & Write) to it to enable actions")]
     WriteDenied,
+    #[error("The token cannot change pull requests. Add Code (Read & Write) to it to enable pull request actions")]
+    PullRequestWriteDenied,
     #[error("Azure DevOps rejected the change: the item may have changed since it loaded, or a rule blocks it. Reload it and try again, or finish in the browser")]
     WriteRejected,
     // Fixed text: the rejected value is never echoed.
@@ -47,7 +49,7 @@ impl AppError {
             AppError::InvalidOrganization => "invalidOrganization",
             AppError::Unauthorized => "unauthorized",
             AppError::Forbidden => "forbidden",
-            AppError::WriteDenied => "writeDenied",
+            AppError::WriteDenied | AppError::PullRequestWriteDenied => "writeDenied",
             AppError::WriteRejected => "writeRejected",
             AppError::InvalidChange(_) => "invalidChange",
             AppError::NotFound => "notFound",

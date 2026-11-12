@@ -457,3 +457,36 @@
   padding: 16px 20px;
   overflow: auto;
 }
+
+/* Pull request actions (vote, line comments). */
+.pr-vote-current {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.pr-vote-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pr-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.pr-action-error {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--tone-red);
+}
+
+.pr-readonly {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-faint);
+}
