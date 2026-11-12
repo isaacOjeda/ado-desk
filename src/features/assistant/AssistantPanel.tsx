@@ -90,8 +90,10 @@ export function AssistantPanel({ open, onClose, onOpenSettings }: Props) {
     // Deferred a tick: a mount that is torn down at once (React StrictMode in development)
     // never starts a process.
     const timer = window.setTimeout(() => {
+    // The size the session started with: a resize before the id arrives is otherwise lost.
+    const started = { cols: terminal.cols, rows: terminal.rows };
     assistantApi
-      .start(terminal.cols, terminal.rows, (event) => {
+      .start(started.cols, started.rows, (event) => {
         if (disposed) return;
         if (event.kind === "output") terminal.write(event.data);
         else setStatus({ kind: "exited", code: event.code });
@@ -102,6 +104,11 @@ export function AssistantPanel({ open, onClose, onOpenSettings }: Props) {
           return;
         }
         id = sessionId;
+        // A host that was hidden (after a failure) or resized during startup measures now.
+        fit.fit();
+        if (terminal.cols !== started.cols || terminal.rows !== started.rows) {
+          assistantApi.resize(sessionId, terminal.cols, terminal.rows).catch(() => {});
+        }
         setStatus((current) => (current.kind === "starting" ? { kind: "running" } : current));
         terminal.focus();
       })

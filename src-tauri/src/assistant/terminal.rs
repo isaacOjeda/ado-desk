@@ -38,7 +38,9 @@ pub enum TerminalEvent {
 struct Session {
     id: u32,
     master: Mutex<Box<dyn MasterPty + Send>>,
-    writer: Mutex<Box<dyn Write + Send>>,
+    /// Keystrokes go through a writer thread in order: a PTY write blocks while the process
+    /// does not read, and must never block the app's main thread.
+    input: std::sync::mpsc::Sender<Vec<u8>>,
     killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
 }
 
@@ -203,7 +205,7 @@ fn start(app: &AppHandle, cols: u16, rows: u16, events: Channel<TerminalEvent>) 
     let session = Arc::new(Session {
         id,
         master: Mutex::new(pair.master),
-        writer: Mutex::new(writer),
+        input: spawn_writer(writer),
         killer: Mutex::new(child.clone_killer()),
     });
     if let Some(previous) = state.current.lock().unwrap_or_else(|e| e.into_inner()).replace(session) {
@@ -212,6 +214,20 @@ fn start(app: &AppHandle, cols: u16, rows: u16, events: Channel<TerminalEvent>) 
     let app = app.clone();
     std::thread::spawn(move || pump(app, id, reader, child, events));
     Ok(id)
+}
+
+/// Writes queued input to the PTY until the session is dropped (its sender closes) or the
+/// process stops reading for good.
+fn spawn_writer(mut writer: Box<dyn Write + Send>) -> std::sync::mpsc::Sender<Vec<u8>> {
+    let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
+    std::thread::spawn(move || {
+        for chunk in rx {
+            if writer.write_all(&chunk).and_then(|()| writer.flush()).is_err() {
+                break;
+            }
+        }
+    });
+    tx
 }
 
 /// Streams the terminal output until the process ends, then reports its exit code.
@@ -268,10 +284,9 @@ pub fn assistant_write(state: State<'_, AssistantState>, id: u32, data: String) 
         return Err(AppError::Assistant("That text is too long to send to the terminal"));
     }
     let session = state.session(id)?;
-    let mut writer = session.writer.lock().unwrap_or_else(|e| e.into_inner());
-    writer
-        .write_all(data.as_bytes())
-        .and_then(|()| writer.flush())
+    session
+        .input
+        .send(data.into_bytes())
         .map_err(|_| AppError::Assistant("The assistant session has ended"))
 }
 
@@ -349,6 +364,50 @@ mod tests {
         let login = std::env::join_paths([&first, &second]).unwrap();
 
         assert_eq!(locate_claude(None, login.to_str()).unwrap(), second.join("claude"));
+    }
+
+    #[test]
+    fn symlinks_to_executables_are_accepted_and_dangling_ones_rejected_without_echo() {
+        let scratch = Scratch::new("symlink");
+        let exe = scratch.0.join("real");
+        file(&exe, 0o700);
+        let link = scratch.0.join("claude");
+        std::os::unix::fs::symlink(&exe, &link).unwrap();
+        assert_eq!(locate_claude(link.to_str(), None).unwrap(), link);
+        let dangling = scratch.0.join("dangling");
+        std::os::unix::fs::symlink(scratch.0.join("nope"), &dangling).unwrap();
+        let err = locate_claude(dangling.to_str(), None).unwrap_err();
+        assert!(!err.to_string().contains(dangling.to_str().unwrap()));
+    }
+
+    #[test]
+    fn queued_input_reaches_the_process_in_order() {
+        let pair = native_pty_system().openpty(PtySize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 }).unwrap();
+        let mut command = CommandBuilder::new("/bin/sh");
+        // Echo off, read one line, print it back once.
+        command.args(["-c", "stty -echo; read line; printf '<%s>' \"$line\""]);
+        let mut child = pair.slave.spawn_command(command).unwrap();
+        drop(pair.slave);
+        let mut reader = pair.master.try_clone_reader().unwrap();
+        let input = spawn_writer(pair.master.take_writer().unwrap());
+        for chunk in ["a", "b", "c", "\r"] {
+            input.send(chunk.as_bytes().to_vec()).unwrap();
+        }
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut out = Vec::new();
+            let mut buf = [0u8; 256];
+            while let Ok(n) = reader.read(&mut buf) {
+                if n == 0 {
+                    break;
+                }
+                out.extend_from_slice(&buf[..n]);
+            }
+            let _ = tx.send(out);
+        });
+        let out = rx.recv_timeout(Duration::from_secs(10)).expect("reads ended");
+        assert!(String::from_utf8_lossy(&out).contains("<abc>"), "{:?}", String::from_utf8_lossy(&out));
+        assert!(child.wait().unwrap().success());
     }
 
     #[test]

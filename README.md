@@ -139,12 +139,12 @@ account or API key through Claude Code's own sign-in; ADO Desk never reads or st
 credentials. Install Claude Code from https://code.claude.com/docs first.
 
 - ADO Desk finds `claude` on your login shell's PATH (an app opened from Finder does not inherit
-  it), then in `~/.local/bin`, `~/.claude/local`, `/opt/homebrew/bin` and `/usr/local/bin`. Set an
+  it), then on the app's own PATH, then in `~/.local/bin`, `~/.claude/local`, `/opt/homebrew/bin` and `/usr/local/bin`. Set an
   exact path in Settings > Assistant when it lives elsewhere.
 - Sessions start in an empty folder owned by ADO Desk (in its app data directory), or in the
   folder set in Settings > Assistant. Claude Code can read and change files in that folder.
-- Hiding the panel keeps the session; *Restart* ends it and starts a new one. Quitting ADO Desk
-  ends it.
+- Hiding the panel keeps the session; *Restart* ends it and starts a new one. Switching
+  organization or quitting ADO Desk ends it.
 
 ## Notifications
 

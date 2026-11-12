@@ -167,13 +167,13 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
         toggleAssistant();
         return;
       }
-      // Keys typed in the assistant's terminal belong to it (Esc interrupts Claude there).
-      if (e.target instanceof Element && e.target.closest(".assistant-panel")) return;
       if ((e.metaKey || e.ctrlKey) && e.key === ",") {
         e.preventDefault();
         openSettings();
         return;
       }
+      // Keys typed in the assistant's terminal belong to it (Esc interrupts Claude there).
+      if (e.target instanceof Element && e.target.closest(".assistant-panel")) return;
       if (e.key === "Escape" && selection) {
         // Leaving a comment box must not close the detail and drop what was typed.
         if (e.target instanceof HTMLTextAreaElement) {

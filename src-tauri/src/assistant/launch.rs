@@ -154,6 +154,34 @@ mod tests {
         assert_eq!(complete_utf8_len(b""), 0);
     }
 
+    fn boundary_floor(s: &str, k: usize) -> usize {
+        (0..=k).rev().find(|i| s.is_char_boundary(*i)).unwrap()
+    }
+
+    #[test]
+    fn complete_utf8_len_is_the_last_char_boundary_for_every_cut() {
+        let s = "a\u{f1}\u{20ac}\u{1F600}b\u{7ff}\u{800}\u{ffff}\u{10000}\u{10ffff}\u{e9}z";
+        for k in 0..=s.len() {
+            assert_eq!(complete_utf8_len(&s.as_bytes()[..k]), boundary_floor(s, k), "cut {k}");
+        }
+    }
+
+    #[test]
+    fn streaming_reassembles_text_for_any_chunk_size() {
+        let s = "h\u{f1}\u{20ac}\u{1F600}\u{1F468}\u{200D}\u{1F469}x".repeat(7);
+        for chunk in 1..=7 {
+            let (mut pending, mut out) = (Vec::new(), String::new());
+            for part in s.as_bytes().chunks(chunk) {
+                pending.extend_from_slice(part);
+                let cut = complete_utf8_len(&pending);
+                out.push_str(&String::from_utf8_lossy(&pending[..cut]));
+                pending.drain(..cut);
+            }
+            assert!(pending.is_empty());
+            assert_eq!(out, s, "chunk {chunk}");
+        }
+    }
+
     #[test]
     fn complete_utf8_len_never_holds_back_invalid_bytes() {
         assert_eq!(complete_utf8_len(&[b'a', 0xFF]), 2);
