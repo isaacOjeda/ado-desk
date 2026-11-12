@@ -1,7 +1,9 @@
 # ADO Desk
 
 Proof of concept: a desktop app (Tauri 2 + React + TypeScript) that shows your Azure Boards
-work items and Azure Repos pull requests.
+work items and Azure Repos pull requests, and runs your own Claude Code in an
+[Assistant](#assistant) panel that can read what you are viewing and, after you confirm, reply
+to comments.
 
 ![Work items assigned to you, with project, sprint, type and state filters](docs/screenshots/work-items.png)
 
@@ -68,6 +70,9 @@ with these scopes:
 - **Build**: Read (optional: build status on pull requests; without it, builds show as unavailable and everything else still loads)
 - **Work Items**: Read & Write (optional: work item actions; without it, the work item detail stays read-only with a hint)
 - **Code**: Read & Write (optional: pull request actions; without it, a refused vote, comment, reply or thread change switches the pull request detail to read-only with a hint)
+
+The [Assistant](#assistant) needs no extra scope: its read tools use the read scopes above, and
+the replies it drafts use the optional Read & Write scopes, like the app's own actions.
 
 Enter your organization (`contoso` or `https://dev.azure.com/contoso`) and the token.
 The token is validated against Azure DevOps, then stored in the OS credential store
@@ -237,9 +242,11 @@ src-tauri/src/
 ```bash
 cd src-tauri && cargo test
 cargo test live_open_vsx -- --ignored   # optional: imports real themes from open-vsx.org
+cargo test live_claude -- --ignored      # optional: runs your installed claude against the MCP server (uses your Claude quota)
 ```
 
 ## Next steps
 
 - Replace PAT with Microsoft Entra ID OAuth (Azure DevOps OAuth is deprecated).
+- Assistant: offer Codex next to Claude Code (the MCP server already speaks the standard protocol).
 - Pagination and caching; PR details and work item detail panes.
