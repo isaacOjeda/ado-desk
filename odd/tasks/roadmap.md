@@ -14,7 +14,8 @@ Order is by dependency first, then value. Update the Status cell; never delete a
 | 3 | Notifications for what needs you | 2 | none | 4 (polling, async ordering) | Done (main 3e32270, 2026-11-07) |
 | 4 | Saved views | — | none | 3 (persisted settings shape) | Done (main 8da5c63, 2026-11-10) |
 | 5 | Build and policy status on PRs | — | Build (Read), optional | 2 (PAT scope, `Forbidden` message) | Done (main a04220f, 2026-11-10) |
-| 6 | Write actions | 5 | Work Items + Code (Read & Write) | 1, 2 (irreversible remote changes) | In progress: work item actions done (main a15715b, 2026-11-12); PR votes and line comments done (main 408db39, 2026-11-12); thread reply and resolve in progress (`pr-actions` T4) |
+| 6 | Write actions | 5 | Work Items + Code (Read & Write) | 1, 2 (irreversible remote changes) | Done (main c89383f, 2026-11-12): work item actions (a15715b), PR votes and line comments (408db39), thread reply and resolve (c89383f) |
+| 7 | Assistant panel (Claude Code + local MCP) | 6 | none | 2, 4, 5 (local server, PTY, new deps); 1 for MCP writes | In progress (feat/assistant-panel, `odd/tasks/assistant-panel.md`) |
 
 ## Phases
 
@@ -58,6 +59,11 @@ Order is by dependency first, then value. Update the Status cell; never delete a
 - Every write runs in Rust, sends only validated fields, shows a confirmation for votes and state changes, and refreshes the item from the server afterwards (no optimistic writes).
 - Split into two deliveries: work item actions, then PR actions.
 - Done when: each action round-trips against a test project and a read-only PAT hides the actions without errors.
+
+### 7. Assistant panel
+- Source: 2026-11-12, "Quiero poder integrar Cloud Code [...] Me gustaría que se pudiera abrir un panel inferior con una sesión de cloud [...] Andes que por ahora sea solo para cloud." (full text in `odd/tasks/assistant-panel.md` L1).
+- A bottom panel runs the user's own `claude` CLI in a terminal (their subscription; the Agent SDK may not use claude.ai login in third-party apps). A local MCP server in Rust gives it what the user is viewing; replies to comments go through the existing write paths, always confirmed in the app.
+- Done when: the panel starts Claude Code from a Finder-launched app, Claude answers a question about the open work item or pull request through the MCP server, and a reply it drafts is posted only after confirmation.
 
 ## Cross-cutting rules
 - The webview keeps no network access; every new call lives in Rust.
