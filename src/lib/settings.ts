@@ -33,6 +33,13 @@ export interface NotificationSettings {
   comments: boolean;
 }
 
+export interface AssistantSettings {
+  /** Absolute path of the `claude` executable; null finds it on the login shell PATH. */
+  claudePath: string | null;
+  /** Absolute path of the folder the session starts in; null uses an empty app folder. */
+  workingFolder: string | null;
+}
+
 export type ViewScope = "workItems" | "pullRequests";
 
 /** Mirrors `views::SavedView` (Rust). */
@@ -52,6 +59,8 @@ export interface Settings {
   notifications: NotificationSettings;
   /** Read-only here: `update_settings` keeps the stored views; use `saveView` / `deleteView`. */
   views: SavedView[];
+  /** Relative, empty or oversized paths are stored as null (normalized in Rust). */
+  assistant: AssistantSettings;
 }
 
 /** Mirrors `views::starters` (Rust). */
@@ -77,6 +86,7 @@ export const DEFAULT_SETTINGS: Settings = {
   search: { globalShortcutEnabled: true, globalShortcut: "CommandOrControl+Shift+Space" },
   notifications: { enabled: true, intervalMinutes: 5, reviewRequests: true, assignments: true, comments: true },
   views: STARTER_VIEWS,
+  assistant: { claudePath: null, workingFolder: null },
 };
 
 /** Emitted by Rust to every window after `update_settings` persisted a change. */

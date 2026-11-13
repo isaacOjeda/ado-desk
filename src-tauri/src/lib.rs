@@ -1,3 +1,4 @@
+mod assistant;
 mod azdo;
 mod background;
 mod checks;
@@ -58,6 +59,8 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .manage(AppState::default())
         .manage(search::SearchState::default())
+        .manage(assistant::AssistantState::default())
+        .manage(assistant::confirm::Confirmations::default())
         .setup(|app| {
             let path = app.path().app_config_dir()?.join(settings::FILE_NAME);
             app.manage(settings::SettingsState::load(path));
@@ -136,10 +139,20 @@ pub fn run() {
             themes::remove_imported_theme,
             views::save_view,
             views::delete_view,
+            assistant::terminal::assistant_start,
+            assistant::terminal::assistant_write,
+            assistant::terminal::assistant_resize,
+            assistant::terminal::assistant_stop,
+            assistant::terminal::assistant_set_view,
+            assistant::confirm::assistant_confirm,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
+            // The assistant's terminal process ends with the app.
+            if let tauri::RunEvent::Exit = event {
+                app.state::<assistant::AssistantState>().stop_all();
+            }
             // Clicking the Dock icon brings back the hidden main window.
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen { has_visible_windows: false, .. } = event {

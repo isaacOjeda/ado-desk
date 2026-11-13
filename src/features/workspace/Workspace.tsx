@@ -29,6 +29,9 @@ import { useInboxFilter } from "../inbox/filter";
 import { activeViewId, viewsFor } from "../views/model";
 import { useSavedViews } from "../views/useSavedViews";
 import { useCheckSummaries } from "../pullrequest/checks";
+import { AssistantPanel } from "../assistant/AssistantPanel";
+import { assistantApi, type ViewContext } from "../assistant/api";
+import { onAskAssistant } from "../assistant/events";
 
 interface Props {
   session: Session;
@@ -69,6 +72,19 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
   const [view, setView] = useState<View>("workItems");
   const [query, setQuery] = useState("");
   const [selection, setSelectionState] = useState<Selection>(null);
+  // The panel mounts on first open and then stays mounted, so hiding it keeps the session.
+  const [assistant, setAssistant] = useState<"never" | "open" | "hidden">("never");
+  const toggleAssistant = useCallback(() => setAssistant((current) => (current === "open" ? "hidden" : "open")), []);
+  // A prompt from "Ask" waits here until the panel's session can take it.
+  const [assistantPrompt, setAssistantPrompt] = useState<{ text: string; seq: number } | null>(null);
+  useEffect(
+    () =>
+      onAskAssistant((text) => {
+        setAssistant("open");
+        setAssistantPrompt((current) => ({ text, seq: (current?.seq ?? 0) + 1 }));
+      }),
+    [],
+  );
   const organization = session.organization;
 
   // Every opened item becomes a quick search "recent".
@@ -92,6 +108,23 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
     }
     onOpenHandled();
   }, [openRequest, organization, setSelection, onOpenHandled]);
+  // The assistant's `current_view` tool reads what is on screen.
+  useEffect(() => {
+    const context: ViewContext =
+      selection?.kind === "workItem"
+        ? { kind: "workItem", id: selection.workItem.id, project: selection.workItem.project, title: selection.workItem.title }
+        : selection?.kind === "pullRequest"
+          ? {
+              kind: "pullRequest",
+              id: selection.pullRequest.id,
+              project: selection.pullRequest.project,
+              repositoryId: selection.pullRequest.repositoryId,
+              repository: selection.pullRequest.repository,
+              title: selection.pullRequest.title,
+            }
+          : { kind: "list", list: view };
+    assistantApi.setView(context).catch(() => {});
+  }, [selection, view, organization]);
   const [workItemFilter, setWorkItemFilter] = usePersistentFilter(organization, "workItems", parseWorkItemFilter);
   const [pullRequestFilter, setPullRequestFilter] = usePersistentFilter(
     organization,
@@ -158,11 +191,19 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
   // Cmd/Ctrl+, opens Settings.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "j") {
+        e.preventDefault();
+        toggleAssistant();
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && e.key === ",") {
         e.preventDefault();
         openSettings();
         return;
       }
+      // Keys typed in the assistant's terminal belong to it (Esc interrupts Claude there), and
+      // Esc in a dialog closes only the dialog.
+      if (e.target instanceof Element && e.target.closest(".assistant-panel, dialog")) return;
       if (e.key === "Escape" && selection) {
         // Leaving a comment box must not close the detail and drop what was typed.
         if (e.target instanceof HTMLTextAreaElement) {
@@ -180,7 +221,7 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [active, selection, setSelection, view]);
+  }, [active, selection, setSelection, view, toggleAssistant]);
 
   const visibleWorkItems = useMemo(
     () =>
@@ -217,6 +258,8 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
         onSignOut={onSignOut}
         onOpenSettings={openSettings}
         onSearch={requestQuickSearch}
+        assistantOpen={assistant === "open"}
+        onToggleAssistant={toggleAssistant}
         views={views}
         activeViewId={currentViewId}
         onApplyView={applyView}
@@ -224,6 +267,7 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
       />
 
       <main className="content">
+        <div className="content-main">
         {selection?.kind === "workItem" ? (
           <WorkItemDetailView
             key={selection.workItem.id}
@@ -307,6 +351,16 @@ export function Workspace({ session, onSignOut, onUnauthorized, openRequest, onO
           )}
         </section>
           </>
+        )}
+        </div>
+        {assistant !== "never" && (
+          <AssistantPanel
+            open={assistant === "open"}
+            onClose={() => setAssistant("hidden")}
+            onOpenSettings={openSettings}
+            prompt={assistantPrompt}
+            onPromptTyped={() => setAssistantPrompt(null)}
+          />
         )}
       </main>
     </div>

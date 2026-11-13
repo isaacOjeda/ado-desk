@@ -41,6 +41,11 @@ pub enum AppError {
     OpenVsx { status: u16 },
     #[error("{0}")]
     ThemeImport(&'static str),
+    // Assistant panel. Fixed text: paths from Settings are never echoed.
+    #[error("Claude Code was not found. Install it (https://code.claude.com/docs), or set its path in Settings > Assistant")]
+    AssistantNotFound,
+    #[error("{0}")]
+    Assistant(&'static str),
 }
 
 impl AppError {
@@ -62,6 +67,8 @@ impl AppError {
             AppError::InvalidExtension => "invalidExtension",
             AppError::OpenVsx { .. } => "openVsx",
             AppError::ThemeImport(_) => "themeImport",
+            AppError::AssistantNotFound => "assistantNotFound",
+            AppError::Assistant(_) => "assistant",
         }
     }
 }

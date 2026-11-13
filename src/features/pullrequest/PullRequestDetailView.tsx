@@ -13,6 +13,8 @@ import { statusBadge } from "./format";
 import { Overview, type PullRequestWrites } from "./Overview";
 import type { ThreadActions } from "./Threads";
 import "./pullrequest.css";
+import { AskAssistant } from "../assistant/AskAssistant";
+import { pullRequestPrompt } from "../assistant/events";
 
 export interface PullRequestDetailViewProps {
   /** Row the user clicked; use it to render the header instantly while details load. */
@@ -86,7 +88,12 @@ export function PullRequestDetailView({ pullRequest, onBack }: PullRequestDetail
           </>
         }
         title={detail.data?.title ?? pullRequest.title}
-        actions={<OpenInBrowser url={pullRequest.url} />}
+        actions={
+          <>
+            <AskAssistant prompt={pullRequestPrompt(pullRequest.id)} />
+            <OpenInBrowser url={pullRequest.url} />
+          </>
+        }
       >
         <div className="detail-meta">
           <span>

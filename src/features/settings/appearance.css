@@ -482,3 +482,32 @@
   gap: 12px;
   justify-content: space-between;
 }
+
+/* Assistant: path fields. */
+.assistant-path {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 280px;
+  flex-shrink: 0;
+}
+
+.assistant-path input {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  outline: none;
+}
+
+.assistant-path input:focus {
+  border-color: var(--accent);
+}
+
+.assistant-path-error {
+  font-size: 11px;
+  color: var(--tone-red);
+}

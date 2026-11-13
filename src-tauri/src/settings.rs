@@ -92,6 +92,17 @@ impl Default for NotificationSettings {
     }
 }
 
+/// The assistant panel. `None` uses the default: `claude` found on the login PATH, and an
+/// empty folder in the app data dir.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AssistantSettings {
+    /// Absolute path of the `claude` executable.
+    pub claude_path: Option<String>,
+    /// Absolute path of the folder the session starts in.
+    pub working_folder: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
@@ -100,6 +111,7 @@ pub struct Settings {
     pub notifications: NotificationSettings,
     /// Changed only through `views::save_view` / `views::delete_view`; loaded leniently.
     pub views: crate::views::Views,
+    pub assistant: AssistantSettings,
 }
 
 /// Loaded settings plus where they live, managed by Tauri.
@@ -149,6 +161,12 @@ pub fn normalize(mut settings: Settings) -> Settings {
     } else {
         SearchSettings::default().global_shortcut
     };
+    // Relative, empty or oversized paths fall back to the defaults.
+    let path = |value: &Option<String>| {
+        crate::assistant::launch::configured_path(value.as_deref()).map(|p| p.to_string_lossy().into_owned())
+    };
+    settings.assistant.claude_path = path(&settings.assistant.claude_path);
+    settings.assistant.working_folder = path(&settings.assistant.working_folder);
     settings
 }
 
@@ -314,9 +332,23 @@ mod tests {
                             "state": "closed"
                         }
                     }
-                ]
+                ],
+                "assistant": { "claudePath": null, "workingFolder": null }
             })
         );
+    }
+
+    #[test]
+    fn older_files_get_default_assistant_settings_and_paths_are_normalized() {
+        let settings: Settings = serde_json::from_str(r#"{ "appearance": { "mode": "dark" } }"#).unwrap();
+        assert_eq!(settings.assistant, AssistantSettings::default());
+
+        let mut settings = Settings::default();
+        settings.assistant.claude_path = Some(" /opt/bin/claude ".into());
+        settings.assistant.working_folder = Some("relative/folder".into());
+        let fixed = normalize(settings);
+        assert_eq!(fixed.assistant.claude_path.as_deref(), Some("/opt/bin/claude"));
+        assert_eq!(fixed.assistant.working_folder, None);
     }
 
     #[test]

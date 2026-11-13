@@ -1,7 +1,9 @@
 # ADO Desk
 
 Proof of concept: a desktop app (Tauri 2 + React + TypeScript) that shows your Azure Boards
-work items and Azure Repos pull requests.
+work items and Azure Repos pull requests, and runs your own Claude Code in an
+[Assistant](#assistant) panel that can read what you are viewing and, after you confirm, reply
+to comments.
 
 ![Work items assigned to you, with project, sprint, type and state filters](docs/screenshots/work-items.png)
 
@@ -69,6 +71,9 @@ with these scopes:
 - **Work Items**: Read & Write (optional: work item actions; without it, the work item detail stays read-only with a hint)
 - **Code**: Read & Write (optional: pull request actions; without it, a refused vote, comment, reply or thread change switches the pull request detail to read-only with a hint)
 
+The [Assistant](#assistant) needs no extra scope: its read tools use the read scopes above, and
+the replies it drafts use the optional Read & Write scopes, like the app's own actions.
+
 Enter your organization (`contoso` or `https://dev.azure.com/contoso`) and the token.
 The token is validated against Azure DevOps, then stored in the OS credential store
 (macOS Keychain / Windows Credential Manager / Secret Service). It never returns to the webview.
@@ -131,6 +136,50 @@ its threads are read again afterwards. A refused write never signs you out; it s
 request to read-only with a hint. `.md` files in the Files tab can also switch between their diff
 and a rendered preview (links and images relative to the repository are not shown).
 
+## Assistant
+
+The **Assistant** panel (sidebar, or ⌘J / Ctrl+J) opens Claude Code in a terminal at the bottom of
+the main window. It runs the `claude` CLI you already installed, signed in with your own Claude
+account or API key through Claude Code's own sign-in; ADO Desk never reads or stores those
+credentials. Install Claude Code from https://code.claude.com/docs first.
+
+- ADO Desk finds `claude` on your login shell's PATH (an app opened from Finder does not inherit
+  it), then on the app's own PATH, then in `~/.local/bin`, `~/.claude/local`, `/opt/homebrew/bin` and `/usr/local/bin`. Set an
+  exact path in Settings > Assistant when it lives elsewhere.
+- Sessions start in an empty folder owned by ADO Desk (in its app data directory), or in the
+  folder set in Settings > Assistant. Claude Code can read and change files in that folder.
+- **✦ Ask** in a work item or pull request header opens the panel and types "About work item
+  123, open in ADO Desk: " (or the pull request equivalent) without sending it, so you finish the
+  question. Only the id is typed: titles are written by other people, so Claude reads them through
+  its tools instead of your prompt.
+- Hiding the panel keeps the session; *Restart* ends it and starts a new one. Switching
+  organization or quitting ADO Desk ends it.
+
+**What Claude can see.** With the first session, ADO Desk starts a local MCP server (`ado-desk`)
+that the session loads through `--mcp-config`. Its read tools work on the active organization and
+run without asking:
+
+- `current_view`: the work item, pull request or list you have open;
+- `get_work_item`: fields, description and the 20 most recent comments;
+- `get_pull_request`: details, reviewers and votes, comment threads and changed files.
+
+**Replies from Claude.** Two more tools post as you: `reply_to_pull_request_thread` (Markdown) and
+`add_work_item_comment` (plain text), 1-4000 characters each. They are never pre-allowed, so
+Claude Code asks for its own permission first, and ADO Desk then shows the exact action, target
+and text in a dialog: nothing is posted until you click *Post* (Cancel or Esc declines; an
+unanswered request expires after 5 minutes). *Post* becomes available a moment after each
+request appears, so a click meant for something else cannot post it. They need the same write scopes as the app's own
+actions (Code: Read & Write, Work Items: Read & Write).
+
+![Confirmation dialog: the assistant wants to post a reply on pull request 55, thread 7, with the exact text and Cancel or Post](docs/screenshots/assistant-confirm.png)
+
+So you can ask "summarize this pull request" or "what is left on this bug?" about whatever is on
+screen. The server listens on 127.0.0.1 only, on a random port, and requires a token created at
+each app launch, which reaches Claude Code only through the `ADO_DESK_MCP_TOKEN` environment
+variable of its terminal; requests from a browser (with an `Origin` header) or for another host
+name are refused. Your Azure DevOps token stays in ADO Desk. Text from Azure DevOps is written by
+other people, and Claude Code is told to treat it as data, not instructions.
+
 ## Notifications
 
 While ADO Desk runs (also with the window closed), it checks every configured organization every
@@ -185,6 +234,7 @@ src-tauri/src/
   background.rs           Menu bar icon, hide-on-close, Dock reopen
   notifications/          Background checks: rules (what is new), fetch, Inbox store, loop
   themes/                 Open VSX search/import, vsix reader, VS Code color mapping, store
+  assistant/              Assistant panel: `claude` lookup, terminal (PTY) sessions, local MCP server
 ```
 
 - Work items: WIQL `[System.AssignedTo] = @Me` excluding Closed/Done/Removed, up to 200.
@@ -195,9 +245,11 @@ src-tauri/src/
 ```bash
 cd src-tauri && cargo test
 cargo test live_open_vsx -- --ignored   # optional: imports real themes from open-vsx.org
+cargo test live_claude -- --ignored      # optional: runs your installed claude against the MCP server (uses your Claude quota)
 ```
 
 ## Next steps
 
 - Replace PAT with Microsoft Entra ID OAuth (Azure DevOps OAuth is deprecated).
+- Assistant: offer Codex next to Claude Code (the MCP server already speaks the standard protocol).
 - Pagination and caching; PR details and work item detail panes.

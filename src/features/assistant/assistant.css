@@ -1,0 +1,178 @@
+/* Assistant panel: a terminal docked under the list or detail view. */
+
+.content-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.assistant-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  min-height: 140px;
+  border-top: 1px solid var(--border);
+  background: var(--content-bg);
+}
+
+.assistant-panel[hidden] {
+  display: none;
+}
+
+.assistant-resize {
+  position: absolute;
+  top: -3px;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: ns-resize;
+  z-index: 1;
+}
+
+.assistant-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 8px 0 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.assistant-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.assistant-subtitle {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.assistant-spacer {
+  flex: 1;
+}
+
+.assistant-terminal {
+  flex: 1;
+  min-height: 0;
+  padding: 6px 0 0 10px;
+}
+
+.assistant-terminal[hidden] {
+  display: none;
+}
+
+.assistant-terminal .xterm {
+  height: 100%;
+}
+
+.assistant-message {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.assistant-message p {
+  margin: 0;
+  max-width: 520px;
+}
+
+.assistant-message-actions,
+.assistant-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.assistant-banner {
+  padding: 6px 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Write confirmation (native modal dialog). */
+.assistant-confirm {
+  width: min(560px, calc(100vw - 48px));
+  padding: 18px 20px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--content-bg);
+  color: var(--text);
+}
+
+.assistant-confirm:modal {
+  overscroll-behavior: contain;
+}
+
+.assistant-confirm::backdrop {
+  background: rgb(0 0 0 / 0.35);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.assistant-confirm h2 {
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+
+.assistant-confirm-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 0 0 12px;
+  font-size: 12px;
+}
+
+.assistant-confirm-facts dt {
+  color: var(--text-faint);
+}
+
+.assistant-confirm-facts dd {
+  margin: 0;
+}
+
+.assistant-confirm-text {
+  max-height: 40vh;
+  overflow: auto;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.assistant-confirm-hint {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.assistant-confirm-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.assistant-confirm-queue {
+  margin-right: auto;
+  align-self: center;
+  font-size: 12px;
+  color: var(--text-faint);
+}

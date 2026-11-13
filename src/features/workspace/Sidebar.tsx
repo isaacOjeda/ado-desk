@@ -14,6 +14,8 @@ interface Props {
   onSignOut: () => void;
   onOpenSettings: () => void;
   onSearch: () => void;
+  assistantOpen: boolean;
+  onToggleAssistant: () => void;
   /** Views of the active organization plus the starters. */
   views: SavedView[];
   /** The view whose filters equal the current ones of the list on screen. */
@@ -35,6 +37,8 @@ export function Sidebar({
   onSelect,
   onSignOut,
   onOpenSettings,
+  assistantOpen,
+  onToggleAssistant,
   onSearch,
   views,
   activeViewId,
@@ -52,6 +56,18 @@ export function Sidebar({
         </span>
         <span>Search</span>
         <kbd>{MOD_KEY}K</kbd>
+      </button>
+      <button
+        className={`nav-item nav-search${assistantOpen ? " is-active" : ""}`}
+        onClick={onToggleAssistant}
+        title={`Assistant (${MOD_KEY}J)`}
+        aria-pressed={assistantOpen}
+      >
+        <span className="nav-icon" aria-hidden>
+          ✦
+        </span>
+        <span>Assistant</span>
+        <kbd>{MOD_KEY}J</kbd>
       </button>
 
       <nav className="nav">
